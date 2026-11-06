@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; font-src 'self'; connect-src 'none';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinShot 设置</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="settings.css" />
+  </head>
+  <body data-page="settings">
+    <div class="settings-window" id="settingsWindow">
+      <aside class="sidebar">
+        <div class="brand drag-region">
+          <img class="app-icon" src="../assets/icon.png" alt="PinShot" draggable="false" />
+          <div class="brand-text">
+            <h1>PinShot</h1>
+            <p>截图贴图</p>
+          </div>
+        </div>
+
+        <nav class="nav" id="nav">
+          <button class="nav-item active" data-pane="capture">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 8V5a2 2 0 0 1 2-2h3" />
+              <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+              <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+              <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+            </svg>
+            截图
+          </button>
+          <button class="nav-item" data-pane="pin">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 17v5" />
+              <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+            </svg>
+            贴图
+          </button>
+          <button class="nav-item" data-pane="about">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <line x1="12" y1="11" x2="12" y2="16" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            关于
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="status"><span class="status-dot"></span>托盘运行中</div>
+          <div class="version" id="sidebarVersion">v1.0.0 · Windows</div>
+        </div>
+      </aside>
+
+      <main class="content" id="content">
+        <button class="window-close" id="closeBtn" title="关闭 (Esc)">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="18" y1="6" x2="6" y2="18" />
+          </svg>
+        </button>
+
+        <!-- 截图 -->
+        <section class="pane active" data-pane="capture">
+          <header class="pane-header drag-region">
+            <h2>截图</h2>
+            <p>全局快捷键与区域截图流程</p>
+          </header>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="6" width="18" height="12" rx="2" />
+                <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" />
+              </svg>
+              全局快捷键
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">截图并贴图</div>
+                <div class="row-subtitle">框选区域 → 标注 → Enter 贴到屏幕</div>
+              </div>
+              <div class="keycaps">
+                <span class="keycap">Ctrl</span><span class="keycap plus">+</span>
+                <span class="keycap">Shift</span><span class="keycap plus">+</span>
+                <span class="keycap">2</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">截图并复制</div>
+                <div class="row-subtitle">框选区域 → 标注 → 直接复制到剪贴板</div>
+              </div>
+              <div class="keycaps">
+                <span class="keycap">Ctrl</span><span class="keycap plus">+</span>
+                <span class="keycap">Shift</span><span class="keycap plus">+</span>
+                <span class="keycap">1</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">从剪贴板贴图</div>
+                <div class="row-subtitle">读取剪贴板图片 → 标注 → 贴图</div>
+              </div>
+              <div class="keycaps">
+                <span class="keycap">Ctrl</span><span class="keycap plus">+</span>
+                <span class="keycap">Shift</span><span class="keycap plus">+</span>
+                <span class="keycap">3</span>
+              </div>
+            </div>
+
+            <div class="row warning-row" id="hotkeyWarning" hidden>
+              <div class="row-text">
+                <div class="row-title warning-title">快捷键注册失败</div>
+                <div class="row-subtitle" id="hotkeyWarningText">可能被其他应用占用，仍可从托盘菜单触发。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+              </svg>
+              截图与标注
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">区域截图</div>
+                <div class="row-subtitle">desktopCapturer 冻结帧，多显示器逐屏框选，按 scaleFactor 像素裁剪</div>
+              </div>
+              <span class="tag">冻结帧</span>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">标注编辑器</div>
+                <div class="row-subtitle">画笔 / 直线 / 箭头 / 矩形 / 高亮 / 橡皮擦，Enter 完成 · Ctrl+C 复制 · Ctrl+S 保存</div>
+              </div>
+              <span class="tag">深色工作台</span>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">截图前隐藏贴图</div>
+                <div class="row-subtitle">抓屏前临时隐藏已有贴图，避免把贴图截进新截图</div>
+              </div>
+              <span class="tag">自动</span>
+            </div>
+          </div>
+
+          <div class="pane-actions">
+            <button class="text-btn accent" id="resetBtn">恢复默认设置</button>
+            <span class="pane-note">所有设置立即生效并保存到 settings.json</span>
+          </div>
+        </section>
+
+        <!-- 贴图 -->
+        <section class="pane" data-pane="pin">
+          <header class="pane-header drag-region">
+            <h2>贴图</h2>
+            <p>自动隐藏、透明度与外观</p>
+          </header>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              自动隐藏
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">自动隐藏贴图</div>
+                <div class="row-subtitle">鼠标离开后自动淡出，扫回贴图位置立即恢复。</div>
+              </div>
+              <button class="switch" id="autoHideEnabled" role="switch" aria-checked="true" aria-label="自动隐藏贴图"></button>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">隐藏延迟</div>
+                <div class="row-subtitle">鼠标离开多久后开始淡出</div>
+              </div>
+              <div class="slider-control">
+                <input type="range" id="delaySlider" min="0.5" max="8" step="0.5" value="2" aria-label="隐藏延迟" />
+                <span class="value" id="delayValue">2.0 s</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">幽灵透明度</div>
+                <div class="row-subtitle">隐藏时保留的可见程度</div>
+              </div>
+              <div class="slider-control">
+                <input type="range" id="ghostSlider" min="5" max="60" step="1" value="15" aria-label="幽灵透明度" />
+                <span class="value" id="ghostValue">15%</span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">完全隐藏</div>
+                <div class="row-subtitle">淡出后完全不显示，而不是保留残影。</div>
+              </div>
+              <button class="switch" id="hideEntirely" role="switch" aria-checked="false" aria-label="完全隐藏"></button>
+            </div>
+
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">隐藏时点击穿透</div>
+                <div class="row-subtitle">隐藏状态下鼠标点击直接穿过贴图。</div>
+              </div>
+              <button class="switch" id="clickThroughWhenHidden" role="switch" aria-checked="true" aria-label="隐藏时点击穿透"></button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5" />
+              </svg>
+              外观
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">贴图边框</div>
+                <div class="row-subtitle">1px 自适应描边，浅色图片用深描边、深色图片用白描边</div>
+              </div>
+              <button class="switch" id="showPinBorder" role="switch" aria-checked="true" aria-label="贴图边框"></button>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">贴图阴影</div>
+                <div class="row-subtitle">窗口投影，让贴图浮在普通窗口之上</div>
+              </div>
+              <button class="switch" id="showPinShadow" role="switch" aria-checked="true" aria-label="贴图阴影"></button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="2" y="4" width="20" height="13" rx="2" />
+                <path d="M8 21h8M12 17v4" />
+              </svg>
+              新贴图
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <div class="row-title">默认放在桌面</div>
+                <div class="row-subtitle">新贴图默认贴在桌面（不置顶、不参与自动隐藏）</div>
+              </div>
+              <button class="switch" id="defaultPinDesktop" role="switch" aria-checked="false" aria-label="默认放在桌面"></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 关于 -->
+        <section class="pane" data-pane="about">
+          <header class="pane-header drag-region">
+            <h2>关于</h2>
+            <p>PinShot Windows 版</p>
+          </header>
+
+          <div class="about-hero">
+            <img class="about-icon" src="../assets/icon.png" alt="PinShot" draggable="false" />
+            <div class="about-text">
+              <div class="about-name">PinShot</div>
+              <div class="about-tagline">截图 → 标注 → 贴图，一直在你眼前。</div>
+              <div class="about-version" id="aboutVersion">v1.0.0 · Electron MVP</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="6" width="18" height="12" rx="2" />
+                <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" />
+              </svg>
+              常用快捷键
+            </div>
+            <div class="about-shortcuts">
+              <div class="shortcut-line"><span>截图并贴图</span><span class="keycaps"><span class="keycap">Ctrl</span><span class="keycap plus">+</span><span class="keycap">Shift</span><span class="keycap plus">+</span><span class="keycap">2</span></span></div>
+              <div class="shortcut-line"><span>截图并复制</span><span class="keycaps"><span class="keycap">Ctrl</span><span class="keycap plus">+</span><span class="keycap">Shift</span><span class="keycap plus">+</span><span class="keycap">1</span></span></div>
+              <div class="shortcut-line"><span>从剪贴板贴图</span><span class="keycaps"><span class="keycap">Ctrl</span><span class="keycap plus">+</span><span class="keycap">Shift</span><span class="keycap plus">+</span><span class="keycap">3</span></span></div>
+              <div class="shortcut-line"><span>标注完成 / 复制 / 保存</span><span class="keycaps"><span class="keycap">Enter</span><span class="keycap plus">/</span><span class="keycap">Ctrl+C</span><span class="keycap plus">/</span><span class="keycap">Ctrl+S</span></span></div>
+              <div class="shortcut-line"><span>关闭贴图</span><span class="keycaps"><span class="keycap">Esc</span></span></div>
+            </div>
+          </div>
+
+          <p class="about-note">
+            本版本沿用 macOS 版 PinShot 的暖石墨 / 纸白 / 信号橙设计语言，使用 Electron
+            从零实现 Windows MVP：托盘应用、冻结帧区域截图、标注编辑器、置顶贴图与自动隐藏。
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script src="settings.js"></script>
+  </body>
+</html>

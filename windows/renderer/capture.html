@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: blob: data:; font-src 'self'; connect-src 'none';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinShot 截图</title>
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="capture.css" />
+  </head>
+  <body data-page="capture">
+    <div class="screen" id="screen">
+      <img class="frozen" id="frozen" alt="" draggable="false" />
+      <div class="dim" id="dim"></div>
+
+      <div class="selection" id="selection" hidden>
+        <img class="bright" id="bright" alt="" draggable="false" />
+        <span class="corner tl"></span>
+        <span class="corner tr"></span>
+        <span class="corner bl"></span>
+        <span class="corner br"></span>
+      </div>
+
+      <div class="guide guide-x" id="guideX" hidden></div>
+      <div class="guide guide-y" id="guideY" hidden></div>
+
+      <div class="crosshair" id="crosshair" hidden>
+        <span class="h"></span>
+        <span class="v"></span>
+      </div>
+
+      <div class="hint" id="hint">正在抓取屏幕…</div>
+      <div class="size-badge" id="sizeBadge" hidden></div>
+    </div>
+
+    <script src="capture.js"></script>
+  </body>
+</html>

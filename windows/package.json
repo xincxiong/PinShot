@@ -1,0 +1,20 @@
+{
+  "name": "pinshot-windows",
+  "productName": "PinShot",
+  "version": "1.0.0",
+  "description": "PinShot — 截图贴图工具 Windows 版（Electron）",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "author": "PinShot",
+  "scripts": {
+    "start": "electron .",
+    "start:smoke": "electron . --smoke-test",
+    "check": "node --check main.js && node --check preload.js && node --check renderer/capture.js && node --check renderer/editor.js && node --check renderer/pin.js && node --check renderer/settings.js",
+    "package:win": "electron-packager . PinShot --platform=win32 --arch=x64 --out=dist --overwrite --icon=assets/icon.ico --app-version=1.0.0 --asar --prune --win32metadata.CompanyName=PinShot --win32metadata.FileDescription=PinShot --win32metadata.ProductName=PinShot"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.2.3"
+  }
+}

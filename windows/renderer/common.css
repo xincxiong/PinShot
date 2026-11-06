@@ -1,0 +1,128 @@
+/* PinShot 共用设计变量与基础样式。
+ * 视觉规范来自 macOS 版 Sources/UI/Theme.swift：
+ * 暖石墨、纸白、信号橙；大圆角、细描边、无重边框。 */
+
+:root {
+  color-scheme: light dark;
+
+  --content-bg: #f4f3f0;
+  --sidebar-bg: #eceae5;
+  --card-bg: #fcfbf9;
+  --card-border: #e4e1da;
+  --separator: #edeae4;
+
+  --text-primary: #1d1b18;
+  --text-secondary: #75716a;
+  --text-tertiary: #99948b;
+
+  --accent: #e8551f;
+  --accent-hover: #d4470f;
+  --accent-soft: rgba(232, 85, 31, 0.12);
+
+  --keycap-bg: #f0ede7;
+  --keycap-border: #ddd8cf;
+
+  --success: #2c9a62;
+  --danger: #d2453f;
+  --warning: #c98a13;
+
+  --hover-fill: rgba(0, 0, 0, 0.05);
+  --pressed-fill: rgba(0, 0, 0, 0.09);
+
+  --display-font: -apple-system, "Segoe UI Variable Display", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --text-font: -apple-system, "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --mono-font: "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --content-bg: #171614;
+    --sidebar-bg: #201e1b;
+    --card-bg: #24221e;
+    --card-border: #36322c;
+    --separator: #302c27;
+
+    --text-primary: #f2efe9;
+    --text-secondary: #a9a297;
+    --text-tertiary: #7e776c;
+
+    --accent: #ff7a45;
+    --accent-hover: #ff8f62;
+    --accent-soft: rgba(255, 122, 69, 0.16);
+
+    --keycap-bg: #2b2823;
+    --keycap-border: #3c3730;
+
+    --hover-fill: rgba(255, 255, 255, 0.08);
+    --pressed-fill: rgba(255, 255, 255, 0.13);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: var(--text-font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: default;
+}
+
+button:focus {
+  outline: none;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* 快捷键键帽 */
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--keycap-bg);
+  border: 1px solid var(--keycap-border);
+  border-bottom-width: 2px;
+  color: var(--text-primary);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.keycap.plus {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-width: 0;
+  color: var(--text-tertiary);
+  min-width: 8px;
+  padding: 0 1px;
+  font-weight: 400;
+}

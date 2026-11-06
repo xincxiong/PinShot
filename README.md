@@ -8,6 +8,8 @@
 >
 官网：https://xincxiong.github.io/PinShot/ · 最新版本：[Releases](https://github.com/xincxiong/PinShot/releases)
 
+**Windows 版（Beta）**：Electron 便携版，见 [`windows/`](windows/)；下载 [PinShot 1.0.0 for Windows](https://github.com/xincxiong/PinShot/releases/tag/v1.0.0-windows)。
+
 > **English**: PinShot is a native macOS screenshot pinboard — region capture, annotation, resizable pinned windows, floating/desktop placement, auto-hide and clipboard pinning. No dependencies, no Dock icon.
 
 ```
@@ -74,6 +76,14 @@ PinShot 有一套自己的视觉语言（**Capture instrument**）：暖石墨�
 [DMG](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg) ·
 [ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.zip) ·
 [版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.0.0)
+
+Windows 10/11 x64（Beta）：
+[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0-windows/PinShot-1.0.0-windows-x64.zip) ·
+[Windows 说明](windows/README.md)
+
+### Windows 版
+
+`windows/` 是用 Electron 实现的 Windows MVP，包含托盘、区域截图、标注、贴图、自动隐藏与设置；运行与交叉打包见 [`windows/README.md`](windows/README.md)。Windows 版为 Beta：未签名、桌面模式为近似实现，暂不含安装器与自启。
 
 ### 从源码构建（本机没有 Xcode 也可以）
 

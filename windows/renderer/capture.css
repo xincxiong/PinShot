@@ -1,0 +1,193 @@
+/* 截图覆盖层：冻结帧 + 暗色遮罩 + 选区。 */
+
+html,
+body {
+  background: transparent;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.screen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+.frozen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+}
+
+.dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 9, 8, 0.46);
+  pointer-events: none;
+}
+
+.selection {
+  position: absolute;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 0 24px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.selection .bright {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  display: block;
+}
+
+.corner {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 0 solid #e8551f;
+  z-index: 4;
+}
+
+.corner.tl {
+  top: -2px;
+  left: -2px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.corner.tr {
+  top: -2px;
+  right: -2px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+
+.corner.bl {
+  bottom: -2px;
+  left: -2px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+
+.corner.br {
+  bottom: -2px;
+  right: -2px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+
+.guide {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.guide-x {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.guide-y {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.crosshair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.crosshair span {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.crosshair .h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.crosshair .v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.hint {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: rgba(20, 19, 18, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  transition: opacity 0.18s ease;
+}
+
+.hint .key {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.size-badge {
+  position: absolute;
+  z-index: 6;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(20, 19, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #fff;
+  background: rgba(20, 19, 18, 0.92);
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+  z-index: 20;
+}

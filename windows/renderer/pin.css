@@ -1,0 +1,261 @@
+/* 贴图窗口：透明留白 + 圆角图片卡 + 悬停玻璃工具栏 + 四角缩放。 */
+
+html,
+body {
+  background: transparent;
+  overflow: hidden;
+  cursor: default;
+}
+
+.pin-window {
+  position: absolute;
+  inset: 0;
+  --pin-border: rgba(255, 255, 255, 0.45);
+}
+
+.card {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  transition: box-shadow 0.15s ease;
+}
+
+.show-border .card {
+  box-shadow: inset 0 0 0 1px var(--pin-border);
+}
+
+.show-shadow .card {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+}
+
+.show-border.show-shadow .card {
+  box-shadow: inset 0 0 0 1px var(--pin-border), 0 10px 30px rgba(0, 0, 0, 0.42);
+}
+
+.pin-window.dragging .card {
+  cursor: grabbing;
+}
+
+.pin-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* 悬停工具栏                                                          */
+/* ------------------------------------------------------------------ */
+
+.toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(26, 25, 23, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  z-index: 6;
+}
+
+.pin-window.hover .toolbar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.pin-window.interacting .toolbar,
+.pin-window.auto-hidden .toolbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.tb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #ffffff;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.tb:active {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.tb svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tb.active {
+  color: #ff7a45;
+}
+
+.tb .icon-eye-off,
+.tb .icon-desktop {
+  display: none;
+}
+
+.tb.disabled-eye .icon-eye {
+  display: none;
+}
+
+.tb.disabled-eye .icon-eye-off {
+  display: block;
+}
+
+.tb.is-desktop .icon-pin {
+  display: none;
+}
+
+.tb.is-desktop .icon-desktop {
+  display: block;
+}
+
+/* ------------------------------------------------------------------ */
+/* 四角缩放把手                                                        */
+/* ------------------------------------------------------------------ */
+
+.handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  z-index: 8;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pin-window.hover .handle {
+  opacity: 1;
+}
+
+.pin-window.auto-hidden .handle {
+  opacity: 0 !important;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.handle.tl {
+  top: 3px;
+  left: 3px;
+  cursor: nwse-resize;
+}
+
+.handle.tr {
+  top: 3px;
+  right: 3px;
+  cursor: nesw-resize;
+}
+
+.handle.bl {
+  bottom: 3px;
+  left: 3px;
+  cursor: nesw-resize;
+}
+
+.handle.br {
+  bottom: 3px;
+  right: 3px;
+  cursor: nwse-resize;
+}
+
+/* ------------------------------------------------------------------ */
+/* 尺寸徽标 / 轻提示                                                    */
+/* ------------------------------------------------------------------ */
+
+.size-badge {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(20, 19, 18, 0.62);
+  color: rgba(255, 255, 255, 0.95);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 9;
+}
+
+.size-badge[hidden] {
+  display: none;
+}
+
+.toast {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(20, 19, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  animation: toast-in 0.16s ease;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

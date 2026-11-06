@@ -1,0 +1,352 @@
+/* 标注编辑器：固定深色工作台 + 磨砂玻璃工具栏。 */
+
+:root {
+  --editor-bg: #141312;
+  --editor-border: rgba(255, 255, 255, 0.07);
+  --glass-bg: rgba(31, 30, 28, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --tool-icon: rgba(255, 255, 255, 0.86);
+  --hint: rgba(255, 255, 255, 0.45);
+  --accent: #e8551f;
+  --accent-hover: #d4470f;
+  --accent-soft: rgba(232, 85, 31, 0.16);
+}
+
+html,
+body {
+  background: transparent;
+  overflow: hidden;
+}
+
+.workbench {
+  position: absolute;
+  inset: 20px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--editor-bg);
+  border: 1px solid var(--editor-border);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.62), 0 2px 10px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* 工具栏                                                              */
+/* ------------------------------------------------------------------ */
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  margin: 22px 24px 0;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(1.35);
+  -webkit-backdrop-filter: blur(20px) saturate(1.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sep {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  margin: 0 8px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.tool,
+.icon-btn {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--tool-icon);
+  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.tool svg,
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool:hover,
+.icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tool:active,
+.icon-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.tool.selected {
+  background: var(--accent-soft);
+  color: #ff7a45;
+}
+
+.icon-btn:disabled {
+  opacity: 0.3;
+}
+
+/* 颜色圆点 */
+.swatch {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: background 0.12s ease;
+}
+
+.swatch::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  transition: transform 0.12s ease;
+}
+
+.swatch:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.swatch.selected {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px #ffffff;
+}
+
+.swatch.selected::before {
+  width: 9px;
+  height: 9px;
+}
+
+.swatch.selected::after {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* 粗细圆点 */
+.width {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transition: background 0.12s ease;
+}
+
+.width:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.width.selected {
+  background: rgba(232, 85, 31, 0.26);
+}
+
+.width .dot {
+  display: block;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.width.selected .dot {
+  background: var(--accent);
+}
+
+/* 右侧动作按钮 */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.text-btn {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.text-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.ghost-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s ease;
+}
+
+.ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ghost-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.primary-btn {
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 10px rgba(232, 85, 31, 0.3);
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+
+.primary-btn:hover {
+  background: var(--accent-hover);
+}
+
+.primary-btn:active {
+  transform: translateY(1px);
+}
+
+/* ------------------------------------------------------------------ */
+/* 画布                                                                */
+/* ------------------------------------------------------------------ */
+
+.canvas-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.canvas-shell {
+  position: relative;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.52);
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#canvas.erasing {
+  cursor: none;
+}
+
+.eraser-cursor {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  margin-top: -10px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hint {
+  flex: none;
+  height: 16px;
+  margin: 10px 24px 20px;
+  color: var(--hint);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: drag;
+}
+
+.busy {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(20, 19, 18, 0.6);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  backdrop-filter: blur(2px);
+}
+
+.busy[hidden],
+.eraser-cursor[hidden] {
+  display: none;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: #e8551f;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

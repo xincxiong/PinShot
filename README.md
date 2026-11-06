@@ -6,6 +6,8 @@
 > 一键框选截图，直接钉在屏幕上：可以标注、调整大小、浮于最上层或挂在桌面，鼠标移开自动淡出。
 > 常驻菜单栏、无 Dock 图标、原生 AppKit，不依赖任何第三方库。
 >
+官网：https://xincxiong.github.io/PinShot/ · 最新版本：[Releases](https://github.com/xincxiong/PinShot/releases)
+
 > **English**: PinShot is a native macOS screenshot pinboard — region capture, annotation, resizable pinned windows, floating/desktop placement, auto-hide and clipboard pinning. No dependencies, no Dock icon.
 
 ```

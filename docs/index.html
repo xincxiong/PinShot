@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PinShot — 截图之后，别让它消失</title>
+<meta name="description" content="PinShot 是 macOS 菜单栏里的截图挂件：框选、标注、缩放，浮在窗口之上或挂在桌面；鼠标离开自动淡出。开源、原生 AppKit、无第三方依赖。">
+<link rel="canonical" href="https://xincxiong.github.io/PinShot/">
+<meta name="theme-color" content="#171a1d">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PinShot — 截图之后，别让它消失">
+<meta property="og:description" content="macOS 截图挂件：框选、标注、缩放、挂在桌面，自动隐藏。">
+<meta property="og:url" content="https://xincxiong.github.io/PinShot/">
+<meta property="og:image" content="images/app-icon.png">
+<link rel="icon" href="images/app-icon.png">
+<link rel="apple-touch-icon" href="images/app-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="container top-inner">
+    <a class="brand" href="#top" aria-label="PinShot 首页">
+      <img src="images/app-icon.png" alt="" width="26" height="26">
+      <span>PinShot</span>
+      <small>1.0.0</small>
+    </a>
+    <nav class="nav" aria-label="主导航">
+      <a href="#modes">贴图</a>
+      <a href="#annotate">标注</a>
+      <a href="#install">安装</a>
+      <a href="https://github.com/xincxiong/PinShot" rel="noopener">GitHub</a>
+    </nav>
+    <a class="top-cta" href="#download">下载</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <p class="meta">macOS 14+ · Apple Silicon · 开源 · MIT</p>
+        <h1 id="hero-title">截图之后，<br><span class="outline">别让它消失。</span></h1>
+        <p class="lede">PinShot 把框选截图变成一块随手可用的挂件：可以标注、缩放，浮在窗口之上，或像便签一样挂在桌面。鼠标移开自动淡出，扫回原处立刻恢复。</p>
+        <div class="hero-actions">
+          <a class="btn-primary" href="https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg">下载 1.0.0</a>
+          <a class="text-link" href="https://github.com/xincxiong/PinShot" rel="noopener">在 GitHub 查看源码 <span aria-hidden="true">↗</span></a>
+        </div>
+        <dl class="facts">
+          <div><dt>⇧⌘2</dt><dd>截图并贴图</dd></div>
+          <div><dt>⇧⌘1</dt><dd>截图并复制</dd></div>
+          <div><dt>菜单栏常驻</dt><dd>没有 Dock 图标</dd></div>
+        </dl>
+      </div>
+
+      <div class="hero-board" aria-label="PinShot 界面截图">
+        <span class="crop tl" aria-hidden="true"></span>
+        <span class="crop tr" aria-hidden="true"></span>
+        <span class="crop bl" aria-hidden="true"></span>
+        <span class="crop br" aria-hidden="true"></span>
+
+        <figure class="pin-card pin-a">
+          <span class="pin-dot" aria-hidden="true"></span>
+          <img src="images/web/pin-real.jpg" alt="一张参考截图被 PinShot 钉在屏幕上，悬停显示工具栏" width="1600" height="1069">
+        </figure>
+        <figure class="pin-card pin-b">
+          <span class="pin-dot" aria-hidden="true"></span>
+          <img src="images/web/annotation-real.jpg" alt="PinShot 标注编辑器，画笔与颜色工具栏" width="1600" height="1201">
+        </figure>
+        <figure class="pin-card pin-c">
+          <span class="pin-dot" aria-hidden="true"></span>
+          <img src="images/settings.png" alt="PinShot 设置窗口" width="1640" height="1200">
+        </figure>
+        <img class="panda-stamp" src="images/app-icon.png" alt="" width="1024" height="1024">
+      </div>
+    </div>
+  </section>
+
+  <div class="ticker" aria-label="操作流程">
+    <div class="container ticker-inner">
+      <span class="key">⇧⌘2</span><span>框选</span>
+      <span class="arrow" aria-hidden="true">→</span><span class="key">A</span><span>标注</span>
+      <span class="arrow" aria-hidden="true">→</span><span>拖角缩放</span>
+      <span class="arrow" aria-hidden="true">→</span><span>贴在桌面</span>
+      <span class="arrow" aria-hidden="true">→</span><span>自动淡出</span>
+    </div>
+  </div>
+
+  <section class="section" id="modes">
+    <div class="container intro-grid">
+      <div>
+        <p class="section-label">贴图模式</p>
+        <h2>一张截图，<br>两种待着的方式。</h2>
+      </div>
+      <div class="intro-body">
+        <p>需要在写代码时参考的文档，就浮在窗口最上层；不需要一直盯着看的参考图，就挂在桌面，像一张便签。</p>
+        <p>每个挂件都能单独切换，设置里还能选择新截图的默认放置方式。挂在桌面时自动隐藏暂停，移开窗口就能看到。</p>
+      </div>
+    </div>
+
+    <div class="container modes">
+      <article class="mode">
+        <div class="mode-head"><h3>浮在最上层</h3><span class="tag">floating</span></div>
+        <img src="images/web/pin-real.jpg" alt="浮动贴图，悬停显示工具栏" width="1600" height="1069" loading="lazy" decoding="async">
+        <p>贴在原来的屏幕位置，比普通窗口更高一层。拖动、缩放、复制、保存都在悬停工具栏里。</p>
+      </article>
+      <article class="mode">
+        <div class="mode-head"><h3>挂在桌面</h3><span class="tag">desktop</span></div>
+        <div class="desktop-scene" role="img" aria-label="同一张截图作为桌面便签放在窗口下层">
+          <img src="images/web/pin-real.jpg" alt="" width="1600" height="1069" loading="lazy" decoding="async">
+        </div>
+        <p>放在桌面图标之上、普通窗口之下。工作窗口盖上来时它安静待着，回到桌面它就在那里。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section dark-section" id="annotate">
+    <div class="container annot-grid">
+      <figure class="annot-shot">
+        <img src="images/web/annotation-real.jpg" alt="标注编辑器，包含画笔、直线、箭头、矩形、高亮和橡皮擦" width="1600" height="1201" loading="lazy" decoding="async">
+      </figure>
+      <div class="annot-copy">
+        <p class="section-label light">标注</p>
+        <h2>标注留在<br>截图里。</h2>
+        <p>框选完成就直接进入标注编辑器，不用打开另一个 App。画笔、直线、箭头、矩形、高亮、橡皮擦，六种颜色，三档粗细，撤销重做都在手边。</p>
+        <p>按 <kbd>Enter</kbd> 完成并贴图；也可以 <kbd>⌘C</kbd> 复制，或 <kbd>⌘S</kbd> 存成 PNG。标注以原生像素合成，Retina 下依然清晰。</p>
+        <ul class="tool-list" aria-label="标注工具">
+          <li><kbd>P</kbd> 画笔</li>
+          <li><kbd>L</kbd> 直线</li>
+          <li><kbd>A</kbd> 箭头</li>
+          <li><kbd>R</kbd> 矩形</li>
+          <li><kbd>H</kbd> 高亮</li>
+          <li><kbd>E</kbd> 橡皮擦</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container duo">
+      <div class="duo-copy">
+        <p class="section-label">缩放与剪贴板</p>
+        <h2>大小刚好，<br>顺手就行。</h2>
+        <p>悬停时四角出现把手，拖动任意一角等比缩放，底部会显示当前尺寸。也可以右键选择 100%、75%、50%、25% 或「适合屏幕」。</p>
+        <div class="callout">
+          <p class="callout-title">没有屏幕录制权限？</p>
+          <p>先用系统截图 <kbd>⇧⌃⌘4</kbd> 复制到剪贴板，再从菜单栏选择「从剪贴板贴图…」。标注、缩放、贴图能力完整保留。</p>
+        </div>
+      </div>
+      <div class="duo-visual">
+        <div class="resize-demo" role="img" aria-label="贴图四角出现缩放手柄，底部显示当前尺寸">
+          <img src="images/web/pin-real.jpg" alt="" width="1600" height="1069" loading="lazy" decoding="async">
+          <span class="handle tl" aria-hidden="true"></span>
+          <span class="handle tr" aria-hidden="true"></span>
+          <span class="handle bl" aria-hidden="true"></span>
+          <span class="handle br" aria-hidden="true"></span>
+          <span class="size-badge">1068 × 713</span>
+        </div>
+        <p class="figcap">拖拽四角，底部实时显示当前挂件的尺寸。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section install-section" id="install">
+    <div class="container">
+      <div class="install-head">
+        <div>
+          <p class="section-label">首次使用</p>
+          <h2>三步，第一张挂件。</h2>
+        </div>
+        <p class="install-aside">需要 macOS 14 或更新版本，Apple Silicon（arm64）。安装包约 1.7 MB。</p>
+      </div>
+      <ol class="steps">
+        <li class="step">
+          <span class="step-num">01</span>
+          <h3>拖进 Applications</h3>
+          <p>打开 DMG，把 PinShot.app 拖进 Applications。也可以下载 ZIP 后手动移动。</p>
+        </li>
+        <li class="step">
+          <span class="step-num">02</span>
+          <h3>右键打开一次</h3>
+          <p>本版本未做 Apple 公证，第一次请右键点击 App 选择「打开」。之后就能正常双击启动。</p>
+        </li>
+        <li class="step">
+          <span class="step-num">03</span>
+          <h3>允许屏幕录制</h3>
+          <p>按引导授予权限，完成后退出并重新打开。按 <kbd>⇧⌘2</kbd> 框选第一张截图。</p>
+        </li>
+      </ol>
+      <details class="gatekeeper">
+        <summary>提示“无法验证开发者”怎么办？</summary>
+        <p>在 Applications 中右键 PinShot.app →「打开」，再确认打开。如果仍然被系统拦截，在终端执行：</p>
+        <pre><code>xattr -dr com.apple.quarantine /Applications/PinShot.app</code></pre>
+      </details>
+    </div>
+  </section>
+
+  <section class="download" id="download">
+    <div class="container download-grid">
+      <div>
+        <p class="section-label light">下载</p>
+        <h2>把下一张截图<br>留在屏幕上。</h2>
+        <p class="download-note">v1.0.0 · macOS 14+ · arm64 · MIT 开源</p>
+      </div>
+      <div class="download-actions">
+        <a class="btn-primary big" href="https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg">下载 DMG <span aria-hidden="true">↓</span></a>
+        <a class="btn-outline" href="https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.zip">下载 ZIP</a>
+        <a class="text-link light" href="https://github.com/xincxiong/PinShot/releases/tag/v1.0.0" rel="noopener">版本说明与校验和 <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <img src="images/app-icon.png" alt="PinShot 熊猫图标" width="48" height="48">
+      <div>
+        <strong>PinShot</strong>
+        <p>截图挂件 · 原生 AppKit · 无第三方依赖</p>
+      </div>
+    </div>
+    <p class="footer-en" lang="en">A native macOS screenshot pinboard with annotation, resizing, floating or desktop placement, and auto-hide.</p>
+    <div class="footer-links">
+      <a href="https://github.com/xincxiong/PinShot" rel="noopener">GitHub</a>
+      <a href="https://github.com/xincxiong/PinShot/releases" rel="noopener">Releases</a>
+      <a href="https://github.com/xincxiong/PinShot/blob/main/LICENSE" rel="noopener">MIT License</a>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

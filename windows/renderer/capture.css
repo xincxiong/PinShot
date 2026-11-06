@@ -33,11 +33,17 @@ body {
 
 .selection {
   position: absolute;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 0 24px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   z-index: 3;
+}
+
+.selection-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .selection .bright {

@@ -126,3 +126,8 @@ img {
   padding: 0 1px;
   font-weight: 400;
 }
+
+/* HTML hidden 属性优先级高于各组件自身的 display 设置 */
+[hidden] {
+  display: none !important;
+}

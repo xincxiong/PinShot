@@ -1,6 +1,5 @@
 # PinShot · macOS 截图挂件
 
-[![CI](https://github.com/xincxiong/PinShot/actions/workflows/ci.yml/badge.svg)](https://github.com/xincxiong/PinShot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](https://www.apple.com/macos/)
 

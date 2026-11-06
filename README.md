@@ -22,11 +22,11 @@
 
 | 贴图挂件（悬停工具栏） | 设置窗口（侧边栏） |
 | --- | --- |
-| ![贴图挂件](docs/images/pin-window.png) | ![设置](docs/images/settings.png) |
+| ![贴图挂件](docs/images/web/pin-real.jpg) | ![设置](docs/images/settings.png) |
 
 | 标注编辑器 | 首次引导 |
 | --- | --- |
-| ![标注编辑器](docs/images/annotation.png) | ![首次引导](docs/images/onboarding.png) |
+| ![标注编辑器](docs/images/web/annotation-real.jpg) | ![首次引导](docs/images/onboarding.png) |
 
 | 权限引导 | 菜单栏 |
 | --- | --- |
@@ -69,6 +69,11 @@ PinShot 有一套自己的视觉语言（**Capture instrument**）：暖石墨�
 | ![截图页](docs/images/settings-capture.png) | ![贴图页](docs/images/settings-pin.png) | ![深色](docs/images/settings-dark.png) |
 
 ## 安装
+
+直接下载（macOS 14+ / Apple Silicon）：
+[DMG](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg) ·
+[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.zip) ·
+[版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.0.0)
 
 ### 从源码构建（本机没有 Xcode 也可以）
 

@@ -1,0 +1,7 @@
+build/
+.scratch/
+.DS_Store
+*.swp
+*.xcuserstate
+DerivedData/
+.swiftpm/

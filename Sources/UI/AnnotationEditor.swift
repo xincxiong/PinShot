@@ -61,6 +61,15 @@ private enum AnnotationLayout {
     }
 }
 
+/// 标注编辑器打开时自动 OCR 的状态，用于底部提示按钮。
+enum OCRAutoStatus {
+    case idle
+    case recognizing
+    case ready(Int)
+    case empty
+    case failed
+}
+
 private struct AnnotationEditorMetrics {
     let displaySize: CGSize
     let windowSize: CGSize
@@ -84,6 +93,9 @@ final class AnnotationEditorController: NSWindowController {
     private var canvasView: AnnotationCanvasView!
     private var toolbarView: AnnotationToolbarView!
     private var finished = false
+    private var ocrRunning = false
+    private var ocrResult: TextRecognitionResult?
+    private var ocrPresentWhenReady = false
 
     // MARK: 初始化
 
@@ -165,6 +177,7 @@ final class AnnotationEditorController: NSWindowController {
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(workbenchView)
         refreshToolbarState()
+        startAutomaticOCR()
     }
 
     func dismiss() {
@@ -290,9 +303,60 @@ final class AnnotationEditorController: NSWindowController {
         case "w":
             cancel()
             return true
+        case "t":
+            ocrButtonTapped()
+            return true
         default:
             return false
         }
+    }
+
+    // MARK: OCR
+
+    /// 打开标注编辑器时在后台自动识别一次，结果实时显示在底部按钮上。
+    private func startAutomaticOCR() {
+        guard !ocrRunning, ocrResult == nil else { return }
+        ocrRunning = true
+        workbenchView.setOCRStatus(.recognizing)
+        TextRecognizer.recognize(cgImage: sourceImage.cgImage) { [weak self] result in
+            guard let self else { return }
+            self.ocrRunning = false
+            self.ocrResult = result
+            if result.errorMessage != nil {
+                self.workbenchView.setOCRStatus(.failed)
+            } else if result.isEmpty {
+                self.workbenchView.setOCRStatus(.empty)
+            } else {
+                self.workbenchView.setOCRStatus(.ready(result.text.count))
+            }
+            if self.ocrPresentWhenReady {
+                self.ocrPresentWhenReady = false
+                OCRPanelController.shared.present(image: self.sourceImage, title: "识别文字")
+            }
+        }
+    }
+
+    /// 点击底部「识别文字」/ ⌘T：自动识别还未完成时等它完成后再弹窗，避免重复 OCR。
+    func ocrButtonTapped() {
+        focusWorkbench()
+        if ocrRunning {
+            ocrPresentWhenReady = true
+            return
+        }
+        if let result = ocrResult, result.errorMessage == nil, !result.isEmpty {
+            OCRPanelController.shared.present(
+                text: result.text,
+                title: "识别文字"
+            )
+            return
+        }
+        if ocrResult == nil {
+            // 自动 OCR 没来得及启动（例如离屏渲染模式），按需启动并弹窗。
+            ocrPresentWhenReady = true
+            startAutomaticOCR()
+            return
+        }
+        OCRPanelController.shared.present(image: sourceImage, title: "识别文字")
     }
 
     // MARK: 工具栏动作
@@ -473,6 +537,7 @@ final class AnnotationWorkbenchView: NSView {
     private let canvas: AnnotationCanvasView
     private let toolbar: AnnotationToolbarView
     private let hintLabel: NSTextField
+    private let ocrButton = NSButton()
 
     init(frame frameRect: NSRect, canvas: AnnotationCanvasView, toolbar: AnnotationToolbarView) {
         self.canvas = canvas
@@ -489,9 +554,21 @@ final class AnnotationWorkbenchView: NSView {
         hintLabel.isEditable = false
         hintLabel.isSelectable = false
 
+        ocrButton.isBordered = false
+        ocrButton.bezelStyle = .regularSquare
+        ocrButton.focusRingType = .none
+        ocrButton.font = PSTheme.text(11, weight: .medium)
+        ocrButton.alignment = .right
+        setOCRButtonTitle("识别文字 ⌘T", color: PSTheme.accent)
+        ocrButton.target = self
+        ocrButton.action = #selector(ocrTapped)
+        ocrButton.toolTip = "识别截图中的文字（⌘T）"
+        ocrButton.setAccessibilityLabel("识别截图中的文字")
+
         addSubview(toolbar)
         addSubview(canvas)
         addSubview(hintLabel)
+        addSubview(ocrButton)
     }
 
     required init?(coder: NSCoder) {
@@ -543,11 +620,18 @@ final class AnnotationWorkbenchView: NSView {
             width: width - AnnotationLayout.horizontalInset * 2,
             height: AnnotationLayout.toolbarHeight
         )
+        let ocrWidth: CGFloat = 122
         hintLabel.frame = NSRect(
             x: AnnotationLayout.horizontalInset,
             y: AnnotationLayout.bottomInset,
-            width: width - AnnotationLayout.horizontalInset * 2,
+            width: max(80, width - AnnotationLayout.horizontalInset * 2 - ocrWidth - 12),
             height: AnnotationLayout.hintHeight
+        )
+        ocrButton.frame = NSRect(
+            x: width - AnnotationLayout.horizontalInset - ocrWidth,
+            y: AnnotationLayout.bottomInset - 2,
+            width: ocrWidth,
+            height: 20
         )
         canvas.frame = NSRect(
             x: ((width - canvas.displaySize.width) / 2).rounded(),
@@ -561,6 +645,34 @@ final class AnnotationWorkbenchView: NSView {
     // 拖动深色背景移动窗口（画布与工具栏会自行消费事件）
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
+    }
+
+    @objc private func ocrTapped() {
+        controller?.ocrButtonTapped()
+    }
+
+    /// 自动识别状态：更新底部右侧的 OCR 按钮。
+    func setOCRStatus(_ status: OCRAutoStatus) {
+        switch status {
+        case .idle:
+            setOCRButtonTitle("识别文字 ⌘T", color: PSTheme.accent)
+        case .recognizing:
+            setOCRButtonTitle("识别中…", color: AnnotationEditorColors.hint)
+        case .ready(let characters):
+            setOCRButtonTitle("文字 \(characters) 字 · ⌘T", color: PSTheme.accent)
+        case .empty:
+            setOCRButtonTitle("未识别到文字", color: AnnotationEditorColors.hint)
+        case .failed:
+            setOCRButtonTitle("识别失败 · 重试", color: NSColor.systemRed.withAlphaComponent(0.9))
+        }
+    }
+
+    private func setOCRButtonTitle(_ title: String, color: NSColor) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: PSTheme.text(11, weight: .medium),
+            .foregroundColor: color
+        ]
+        ocrButton.attributedTitle = NSAttributedString(string: title, attributes: attributes)
     }
 
     override func keyDown(with event: NSEvent) {

@@ -153,6 +153,11 @@ final class PinWindowController: NSWindowController {
         onClose?(self)
     }
 
+    /// 识别当前贴图里的文字，打开结果面板（自动复制能力在面板里）。
+    func recognizeText() {
+        OCRPanelController.shared.present(image: image, title: "识别文字")
+    }
+
     /// 复制当前图片到系统剪贴板（PNG + TIFF 两种类型）。
     func copyToPasteboard() {
         let pasteboard = NSPasteboard.general

@@ -7,6 +7,7 @@ import AppKit
 protocol PinToolbarDelegate: AnyObject {
     func pinToolbarDidTapCopy()
     func pinToolbarDidTapSave()
+    func pinToolbarDidTapRecognizeText()
     func pinToolbarDidTapToggleAutoHide()
     func pinToolbarDidTapTogglePlacement()
     func pinToolbarDidTapClose()
@@ -661,6 +662,10 @@ final class PinContentView: NSView, PinToolbarDelegate {
             title: "存储为…", action: #selector(menuSaveAs),
             keyEquivalent: "s", symbol: "square.and.arrow.down"
         ))
+        menu.addItem(makeItem(
+            title: "识别文字…", action: #selector(menuRecognizeText),
+            keyEquivalent: "t", symbol: "text.viewfinder"
+        ))
         let saveDesktop = makeItem(
             title: "存储到桌面", action: #selector(menuSaveToDesktop),
             symbol: "desktopcomputer"
@@ -769,6 +774,10 @@ final class PinContentView: NSView, PinToolbarDelegate {
         controller.copyToPasteboard()
     }
 
+    @objc private func menuRecognizeText() {
+        controller.recognizeText()
+    }
+
     @objc private func menuSaveAs() {
         controller.saveImage(saveAs: true)
     }
@@ -840,6 +849,9 @@ final class PinContentView: NSView, PinToolbarDelegate {
         case "s":
             controller.saveImage(saveAs: !event.modifierFlags.contains(.shift))
             return true
+        case "t":
+            controller.recognizeText()
+            return true
         case "w":
             requestClose()
             return true
@@ -906,6 +918,11 @@ final class PinContentView: NSView, PinToolbarDelegate {
     func pinToolbarDidTapSave() {
         window?.makeFirstResponder(self)
         controller.saveImage(saveAs: true)
+    }
+
+    func pinToolbarDidTapRecognizeText() {
+        window?.makeFirstResponder(self)
+        controller.recognizeText()
     }
 
     func pinToolbarDidTapToggleAutoHide() {
@@ -1110,6 +1127,7 @@ final class PinToolbarView: NSVisualEffectView {
         let specs: [(PinToolbarButton.Kind, String, String)] = [
             (.copy, "doc.on.doc", "复制图片 ⌘C"),
             (.save, "square.and.arrow.down", "存储为… ⌘S"),
+            (.recognizeText, "text.viewfinder", "识别文字 ⌘T"),
             (.toggleAutoHide, "eye", "自动隐藏"),
             (.togglePlacement, "pin.fill", "浮于顶层"),
             (.close, "xmark", "关闭 ⌘W")
@@ -1166,6 +1184,8 @@ final class PinToolbarView: NSVisualEffectView {
             delegate?.pinToolbarDidTapCopy()
         case .save:
             delegate?.pinToolbarDidTapSave()
+        case .recognizeText:
+            delegate?.pinToolbarDidTapRecognizeText()
         case .toggleAutoHide:
             delegate?.pinToolbarDidTapToggleAutoHide()
         case .togglePlacement:
@@ -1203,6 +1223,7 @@ final class PinToolbarButton: NSButton {
     enum Kind: Int {
         case copy
         case save
+        case recognizeText
         case toggleAutoHide
         case togglePlacement
         case close

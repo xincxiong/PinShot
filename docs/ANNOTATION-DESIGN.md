@@ -155,3 +155,11 @@ final class AnnotationEditorController: NSWindowController {
 - ✅ 真机用合成截图 + 合成鼠标验证：画出笔迹，Enter 后贴图尺寸/内容正确。
 - 取舍：固定深色工作台；窗口固定尺寸不可缩放；橡皮擦为整笔删除；离屏工具栏磨砂为叠层模拟，真机为 HUD 磨砂。
 - 文件：`Sources/UI/AnnotationEditor.swift`、`Sources/UI/AnnotationCanvasView.swift`。
+
+
+## 8. OCR 文字识别（Shottr 借鉴）
+
+- 标注编辑器打开时后台调用 macOS Vision（`VNRecognizeTextRequest`，accurate + 中英混合）自动识别原图文字；识别完成后底部右侧按钮显示「文字 N 字 · ⌘T」。
+- 点击按钮或 `⌘T` 打开 `OCRPanelController`：可选中文本、`⌘C` 复制、按钮「复制全文」；面板单例复用、Esc 关闭。
+- 贴图窗口工具栏新增「识别文字」按钮（`text.viewfinder`），右键菜单也有「识别文字…」；识别已贴图的图片。
+- 识别完全本地离线，不上传图片；Vision 坐标按列聚类后按阅读顺序输出，避免多栏截图文字交错。

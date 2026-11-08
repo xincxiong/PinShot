@@ -17,6 +17,32 @@ final class CaptureCoordinator {
     private var annotationEditor: AnnotationEditorController?
     private var clipboardEditor: AnnotationEditorController?
     private var previousFrontmostApp: NSRunningApplication?
+    private var pendingDelay: DispatchWorkItem?
+
+    private enum LastSelectionStore {
+        static let displayIDKey = "lastSelection.displayID"
+        static let rectKey = "lastSelection.rect"
+
+        static func save(displayID: CGDirectDisplayID, rect: CGRect) {
+            let defaults = UserDefaults.standard
+            defaults.set(Int(displayID), forKey: displayIDKey)
+            defaults.set([
+                "x": rect.origin.x, "y": rect.origin.y,
+                "width": rect.width, "height": rect.height
+            ], forKey: rectKey)
+        }
+
+        static func load() -> (CGDirectDisplayID, CGRect)? {
+            let defaults = UserDefaults.standard
+            guard defaults.object(forKey: displayIDKey) != nil,
+                  let dict = defaults.dictionary(forKey: rectKey),
+                  let x = dict["x"] as? Double, let y = dict["y"] as? Double,
+                  let w = dict["width"] as? Double, let h = dict["height"] as? Double,
+                  w > 1, h > 1 else { return nil }
+            let displayID = CGDirectDisplayID(defaults.integer(forKey: displayIDKey))
+            return (displayID, CGRect(x: x, y: y, width: w, height: h))
+        }
+    }
 
     private init() {}
 
@@ -47,6 +73,156 @@ final class CaptureCoordinator {
                 NSLog("[PinShot] capture failed: \(error.localizedDescription)")
                 self.abortCapture()
                 self.handleCaptureFailure(error, mode: mode)
+            }
+        }
+    }
+
+    // MARK: - Shottr 风格截图模式
+
+    var hasLastSelection: Bool { LastSelectionStore.load() != nil }
+
+    /// 全屏截图：抓取鼠标所在显示器的完整画面，进入标注编辑器。
+    func beginFullScreen(mode: Mode = .pin) {
+        guard !isCapturing else { return }
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        PinManager.shared.hideAllForCapture()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+            let result = await ScreenCapturer().captureAllScreens()
+            switch result {
+            case .success(let snapshots):
+                let mouse = NSEvent.mouseLocation
+                let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
+                let snapshot = snapshots.first(where: { $0.frame == screen?.frame }) ?? snapshots.first
+                guard let snapshot,
+                      let image = CaptureGeometry.pinImage(
+                        from: snapshot,
+                        selection: CGRect(origin: .zero, size: snapshot.frame.size),
+                        minPixelSize: 2) else {
+                    self.finishCapture()
+                    return
+                }
+                self.presentAnnotationEditor(image: image, screenRect: snapshot.frame, mode: mode)
+            case .failure(let error):
+                self.abortCapture()
+                self.handleCaptureFailure(error, mode: mode)
+            }
+        }
+    }
+
+    /// 延时截图：给用户留出布置窗口/菜单的时间，到点后走普通框选流程。
+    func beginDelayed(seconds: TimeInterval, mode: Mode = .pin) {
+        guard !isCapturing else { return }
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingDelay = nil
+            PinManager.shared.hideAllForCapture()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+                let result = await ScreenCapturer().captureAllScreens()
+                switch result {
+                case .success(let snapshots):
+                    self.presentSelection(with: snapshots, mode: mode)
+                case .failure(let error):
+                    self.abortCapture()
+                    self.handleCaptureFailure(error, mode: mode)
+                }
+            }
+        }
+        pendingDelay = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, seconds), execute: work)
+    }
+
+    /// 窗口截图：抓取当前前台窗口（自动排除 PinShot 自己）。
+    func beginWindowCapture(mode: Mode = .pin) {
+        guard !isCapturing else { return }
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        PinManager.shared.hideAllForCapture()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+            do {
+                let captured = try await WindowCapturer.captureFrontmostWindow()
+                let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+                    ?? NSScreen.main
+                let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+                let maxSize = CGSize(width: visible.width * 0.7, height: visible.height * 0.7)
+                let scale = min(
+                    1,
+                    maxSize.width / max(captured.image.pointSize.width, 1),
+                    maxSize.height / max(captured.image.pointSize.height, 1)
+                )
+                let displaySize = CGSize(
+                    width: max(1, (captured.image.pointSize.width * scale).rounded()),
+                    height: max(1, (captured.image.pointSize.height * scale).rounded())
+                )
+                let image = PinnedImage(cgImage: captured.image.cgImage, pointSize: displaySize)
+                let frame = CGRect(
+                    x: visible.midX - displaySize.width / 2,
+                    y: visible.midY - displaySize.height / 2,
+                    width: displaySize.width,
+                    height: displaySize.height
+                )
+                self.presentAnnotationEditor(image: image, screenRect: frame, mode: mode)
+            } catch {
+                self.finishCapture()
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "窗口截图失败"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "好")
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+            }
+        }
+    }
+
+    /// 重复上一次的框选区域。
+    func repeatLastSelection() {
+        guard !isCapturing else { return }
+        guard let stored = LastSelectionStore.load() else {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "还没有可重复的区域"
+            alert.informativeText = "先用「截图并贴图」框选一次，之后就可以重复这个区域。"
+            alert.addButton(withTitle: "好")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+            return
+        }
+
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        PinManager.shared.hideAllForCapture()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+            let result = await ScreenCapturer().captureAllScreens()
+            switch result {
+            case .success(let snapshots):
+                let snapshot = snapshots.first(where: { $0.displayID == stored.0 })
+                    ?? snapshots.first(where: { $0.frame.contains(CGPoint(x: stored.1.midX, y: stored.1.midY)) })
+                    ?? snapshots.first
+                guard let snapshot,
+                      let image = CaptureGeometry.pinImage(from: snapshot, selection: stored.1, minPixelSize: 2) else {
+                    self.finishCapture()
+                    return
+                }
+                let globalRect = CaptureGeometry.globalRect(forSelection: stored.1, in: snapshot)
+                self.presentAnnotationEditor(image: image, screenRect: globalRect, mode: .pin)
+            case .failure(let error):
+                self.abortCapture()
+                self.handleCaptureFailure(error, mode: .pin)
             }
         }
     }
@@ -160,6 +336,7 @@ final class CaptureCoordinator {
                     return
                 }
                 let globalRect = CaptureGeometry.globalRect(forSelection: rect, in: snapshot)
+                LastSelectionStore.save(displayID: snapshot.displayID, rect: rect)
                 self.presentAnnotationEditor(image: image, screenRect: globalRect, mode: mode)
             }
         }

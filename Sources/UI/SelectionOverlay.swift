@@ -457,7 +457,7 @@ final class SelectionOverlayView: NSView {
 
     /// 顶部居中半透明胶囊：`拖动框选` + 键帽 `ESC 取消`；仅在无选区时显示。
     private func drawHint() {
-        let label = "拖动框选" as NSString
+        let label = "拖动框选 · Shift 正方形" as NSString
         let labelFont = PSTheme.text(12, weight: .medium)
         let labelAttributes: [NSAttributedString.Key: Any] = [
             .font: labelFont,
@@ -551,7 +551,7 @@ final class SelectionOverlayView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard isDragging else { return }
         let point = clampedPoint(convert(event.locationInWindow, from: nil))
-        selectionRect = CGRect(from: anchorPoint, to: point)
+        selectionRect = CGRect(from: anchorPoint, to: constrainedPoint(point, square: event.modifierFlags.contains(.shift)))
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -559,7 +559,7 @@ final class SelectionOverlayView: NSView {
         isDragging = false
 
         let point = clampedPoint(convert(event.locationInWindow, from: nil))
-        let rect = CGRect(from: anchorPoint, to: point)
+        let rect = CGRect(from: anchorPoint, to: constrainedPoint(point, square: event.modifierFlags.contains(.shift)))
         selectionRect = rect
 
         // 宽或高 < 3pt 视为误触，取消整次截图
@@ -584,6 +584,20 @@ final class SelectionOverlayView: NSView {
     }
 
     // MARK: - 坐标工具
+
+    /// `Shift` 约束为正方形：以按下点为一个角，取水平/垂直中较大的边长，并限制在屏幕内。
+    private func constrainedPoint(_ point: CGPoint, square: Bool) -> CGPoint {
+        guard square else { return point }
+        let dx = point.x - anchorPoint.x
+        let dy = point.y - anchorPoint.y
+        let side = max(abs(dx), abs(dy))
+        let signX: CGFloat = dx >= 0 ? 1 : -1
+        let signY: CGFloat = dy >= 0 ? 1 : -1
+        let maxX = signX > 0 ? bounds.maxX - anchorPoint.x : anchorPoint.x - bounds.minX
+        let maxY = signY > 0 ? bounds.maxY - anchorPoint.y : anchorPoint.y - bounds.minY
+        let fitted = min(side, max(0, maxX), max(0, maxY))
+        return CGPoint(x: anchorPoint.x + signX * fitted, y: anchorPoint.y + signY * fitted)
+    }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
         CGPoint(

@@ -13,6 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case capturePin = 100
         case captureCopy
         case clipboardPin
+        case windowCapture
+        case fullScreen
+        case delayCapture
+        case delay3
+        case delay5
+        case delay10
+        case repeatLast
         case toggleAllPins
         case closeAllPins
         case allDesktop
@@ -83,6 +90,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeItem(title: "截图并贴图", action: #selector(capturePinAction), tag: .capturePin, symbol: "viewfinder"))
         menu.addItem(makeItem(title: "截图并复制", action: #selector(captureCopyAction), tag: .captureCopy, symbol: "doc.on.doc"))
         menu.addItem(makeItem(title: "从剪贴板贴图…", action: #selector(clipboardPinAction), tag: .clipboardPin, symbol: "doc.on.clipboard"))
+        menu.addItem(makeItem(title: "窗口截图", action: #selector(windowCaptureAction), tag: .windowCapture, symbol: "macwindow"))
+        menu.addItem(makeItem(title: "全屏截图", action: #selector(fullScreenAction), tag: .fullScreen, symbol: "rectangle.inset.filled"))
+        let delayItem = NSMenuItem(title: "延时截图", action: nil, keyEquivalent: "")
+        delayItem.tag = MenuTag.delayCapture.rawValue
+        delayItem.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
+        delayItem.image?.isTemplate = true
+        let delayMenu = NSMenu()
+        delayMenu.addItem(makeItem(title: "3 秒后框选", action: #selector(delay3Action), tag: .delay3))
+        delayMenu.addItem(makeItem(title: "5 秒后框选", action: #selector(delay5Action), tag: .delay5))
+        delayMenu.addItem(makeItem(title: "10 秒后框选", action: #selector(delay10Action), tag: .delay10))
+        delayItem.submenu = delayMenu
+        menu.addItem(delayItem)
+        menu.addItem(makeItem(title: "重复上次区域", action: #selector(repeatLastAction), tag: .repeatLast, symbol: "arrow.clockwise"))
         menu.addItem(.separator())
         menu.addItem(makeItem(title: "隐藏全部贴图", action: #selector(toggleAllPinsAction), tag: .toggleAllPins, symbol: "eye.slash"))
         menu.addItem(makeItem(title: "关闭全部贴图", action: #selector(closeAllPinsAction), tag: .closeAllPins, symbol: "xmark.circle"))
@@ -133,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let allItem = item(with: .toggleAllPins)
         allItem?.title = PinManager.shared.allForcedHidden ? "显示全部贴图" : "隐藏全部贴图"
         allItem?.isEnabled = PinManager.shared.pinCount > 0
+        item(with: .repeatLast)?.isEnabled = coordinator.hasLastSelection
         item(with: .closeAllPins)?.isEnabled = PinManager.shared.pinCount > 0
         item(with: .allDesktop)?.isEnabled = PinManager.shared.pinCount > 0
         item(with: .allFloating)?.isEnabled = PinManager.shared.pinCount > 0
@@ -159,6 +180,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func clipboardPinAction() {
         coordinator.beginFromClipboard()
+    }
+
+    @objc private func windowCaptureAction() {
+        coordinator.beginWindowCapture()
+    }
+
+    @objc private func fullScreenAction() {
+        coordinator.beginFullScreen()
+    }
+
+    @objc private func delay3Action() {
+        coordinator.beginDelayed(seconds: 3)
+    }
+
+    @objc private func delay5Action() {
+        coordinator.beginDelayed(seconds: 5)
+    }
+
+    @objc private func delay10Action() {
+        coordinator.beginDelayed(seconds: 10)
+    }
+
+    @objc private func repeatLastAction() {
+        coordinator.repeatLastSelection()
     }
 
     @objc private func toggleAllPinsAction() {

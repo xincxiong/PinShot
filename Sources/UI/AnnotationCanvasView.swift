@@ -19,7 +19,28 @@ struct AnnotationStroke {
         }
     }
 
-    /// 工具类型：前 6 个是工具栏主工具，后 3 个是「更多工具」里的扩展工具。
+    /// 聚光灯工具的样式：黑色半透明压暗 / 白色半透明提亮（矩形内始终保持原亮度）。
+    enum SpotlightStyle: Int {
+        case dark
+        case light
+
+        var title: String {
+            switch self {
+            case .dark: return "压暗"
+            case .light: return "提亮"
+            }
+        }
+
+        /// 聚光区域外的遮罩颜色。
+        var overlayColor: NSColor {
+            switch self {
+            case .dark: return NSColor.black.withAlphaComponent(0.62)
+            case .light: return NSColor.white.withAlphaComponent(0.72)
+            }
+        }
+    }
+
+    /// 工具类型：前 6 个是工具栏主工具，后 6 个是「更多工具」里的扩展工具。
     enum Tool: Int, CaseIterable {
         case pen
         case line
@@ -30,16 +51,27 @@ struct AnnotationStroke {
         case text
         case step
         case blur
+        case spotlight
+        case eyedropper
+        case ruler
 
         /// 工具栏主工具（保持 6 个不变）
         static let primaryTools: [Tool] = [.pen, .line, .arrow, .rectangle, .highlighter, .eraser]
         /// 「更多工具」弹窗中的扩展工具
-        static let extendedTools: [Tool] = [.text, .step, .blur]
+        static let extendedTools: [Tool] = [.text, .step, .blur, .spotlight, .eyedropper, .ruler]
 
         /// 是否属于「更多工具」扩展组
         var isExtended: Bool {
             switch self {
-            case .text, .step, .blur: return true
+            case .text, .step, .blur, .spotlight, .eyedropper, .ruler: return true
+            default: return false
+            }
+        }
+
+        /// 是否是不产生持久笔画、只在画布上临时交互的工具（取色 / 测量）。
+        var isTransient: Bool {
+            switch self {
+            case .eyedropper, .ruler: return true
             default: return false
             }
         }
@@ -55,6 +87,9 @@ struct AnnotationStroke {
             case .text: return "textformat"
             case .step: return "1.circle"
             case .blur: return "square.grid.3x3"
+            case .spotlight: return "flashlight.on.fill"
+            case .eyedropper: return "eyedropper"
+            case .ruler: return "ruler"
             }
         }
 
@@ -69,6 +104,9 @@ struct AnnotationStroke {
             case .text: return "文字"
             case .step: return "序号"
             case .blur: return "模糊"
+            case .spotlight: return "聚光灯"
+            case .eyedropper: return "取色器"
+            case .ruler: return "测量"
             }
         }
 
@@ -84,12 +122,15 @@ struct AnnotationStroke {
             case .text: return "T"
             case .step: return "N"
             case .blur: return "B"
+            case .spotlight: return "G"
+            case .eyedropper: return "I"
+            case .ruler: return "M"
             }
         }
     }
 
     var tool: Tool
-    /// 画笔 / 高亮：完整轨迹；直线 / 箭头 / 矩形 / 模糊：起点 + 终点；
+    /// 画笔 / 高亮：完整轨迹；直线 / 箭头 / 矩形 / 模糊 / 聚光灯：起点 + 终点；
     /// 文字 / 序号：锚点（文字为左上角，序号为圆心）。
     var points: [CGPoint]
     var color: NSColor
@@ -101,6 +142,8 @@ struct AnnotationStroke {
     var stepNumber: Int? = nil
     /// 模糊工具的效果样式
     var blurStyle: BlurStyle? = nil
+    /// 聚光灯工具的样式（黑色压暗 / 白色提亮）
+    var spotlightStyle: SpotlightStyle? = nil
 
     /// 实际绘制颜色：高亮固定 35% 透明。
     var renderedColor: NSColor {
@@ -117,6 +160,7 @@ extension AnnotationStroke: Equatable {
             && lhs.text == rhs.text
             && lhs.stepNumber == rhs.stepNumber
             && lhs.blurStyle == rhs.blurStyle
+            && lhs.spotlightStyle == rhs.spotlightStyle
     }
 }
 
@@ -138,6 +182,12 @@ final class AnnotationCanvasView: NSView {
     /// 当前工具
     var tool: AnnotationStroke.Tool = .pen {
         didSet {
+            // 切换工具即清除测量结果 / 未完成的拖拽，保证「保留到切换工具」的语义
+            if tool != oldValue {
+                currentStroke = nil
+                activeRuler = nil
+                committedRuler = nil
+            }
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
@@ -148,9 +198,15 @@ final class AnnotationCanvasView: NSView {
     var lineWidth: CGFloat = 4
     /// 模糊工具当前样式（高斯 / 马赛克），由「更多工具」弹窗切换
     var blurStyle: AnnotationStroke.BlurStyle = .pixelate
+    /// 聚光灯当前样式（压暗 / 提亮），由「更多工具」弹窗切换
+    var spotlightStyle: AnnotationStroke.SpotlightStyle = .dark {
+        didSet { needsDisplay = true }
+    }
 
     /// 笔画/撤销状态变化时回调（刷新工具栏按钮）
     var onEditStateChanged: (() -> Void)?
+    /// 取色器取到颜色并写入剪贴板后回调（hex, 颜色），仅用于底部临时提示，不进入笔画
+    var onColorPicked: ((String, NSColor) -> Void)?
 
     // MARK: 内部状态
 
@@ -160,6 +216,15 @@ final class AnnotationCanvasView: NSView {
     private var redoStack: [[AnnotationStroke]] = []
     private var eraseSnapshot: [AnnotationStroke]?
     private var eraseChanged = false
+
+    /// 测量工具的一次完整拖拽（画布显示坐标 pt）。不进入笔画、不参与导出。
+    private struct RulerMeasurement {
+        var start: CGPoint
+        var end: CGPoint
+    }
+    /// 正在拖拽中的测量 / 松手后保留到切换工具的测量
+    private var activeRuler: RulerMeasurement?
+    private var committedRuler: RulerMeasurement?
 
     // 文字工具的内联输入框状态
     private var textEditor: NSTextField?
@@ -239,6 +304,13 @@ final class AnnotationCanvasView: NSView {
         onEditStateChanged?()
     }
 
+    /// 调试 / 离屏渲染：预置一条测量结果（测量不产生持久笔画，仅用于截图自检）。
+    func debugSetRulerMeasurement(start: CGPoint, end: CGPoint) {
+        committedRuler = RulerMeasurement(start: start, end: end)
+        activeRuler = nil
+        needsDisplay = true
+    }
+
     // MARK: 绘制
 
     override var isOpaque: Bool { false }
@@ -283,6 +355,11 @@ final class AnnotationCanvasView: NSView {
             draw(currentStroke, in: context)
         }
         context.restoreGState()
+
+        // 测量覆层：只画在画布上（导出路径 compositeImage 不会走到这里）
+        if let ruler = activeRuler ?? committedRuler {
+            drawRuler(ruler, in: context)
+        }
 
         // 画布描边：1px 白色 10%
         let border = NSBezierPath(
@@ -364,6 +441,15 @@ final class AnnotationCanvasView: NSView {
             context.restoreGState()
             drawBlur(stroke, in: context)
             return
+
+        case .spotlight:
+            context.restoreGState()
+            drawSpotlight(stroke, in: context)
+            return
+
+        case .eyedropper, .ruler:
+            // 瞬时工具不产生持久笔画；测量覆层由 drawRuler 单独绘制
+            break
 
         case .eraser:
             break
@@ -452,6 +538,36 @@ final class AnnotationCanvasView: NSView {
         context.saveGState()
         context.interpolationQuality = .high
         context.draw(filtered, in: rect)
+        context.restoreGState()
+    }
+
+    /// 聚光灯：矩形外铺半透明黑（或白），矩形内保持原亮度；圆角让边缘更柔和（画布与导出共用）。
+    private func drawSpotlight(_ stroke: AnnotationStroke, in context: CGContext) {
+        guard let rect = normalizedRect(for: stroke) else { return }
+        let style = stroke.spotlightStyle ?? spotlightStyle
+        let radius = min(12, min(rect.width, rect.height) / 2)
+        // even-odd 挖孔：外层 = 整块画布，内层 = 圆角聚光区域
+        let mask = CGMutablePath()
+        mask.addRect(bounds)
+        mask.addRoundedRect(in: rect, cornerWidth: radius, cornerHeight: radius)
+        context.saveGState()
+        context.addPath(mask)
+        context.setFillColor(style.overlayColor.cgColor)
+        context.fillPath(using: .evenOdd)
+        // 聚光区域细描边，让边界在深浅背景上都可辨认
+        let border = CGPath(
+            roundedRect: rect,
+            cornerWidth: radius,
+            cornerHeight: radius,
+            transform: nil
+        )
+        context.addPath(border)
+        let borderColor = style == .dark
+            ? NSColor.white.withAlphaComponent(0.22)
+            : NSColor.black.withAlphaComponent(0.18)
+        context.setStrokeColor(borderColor.cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
         context.restoreGState()
     }
 
@@ -547,6 +663,181 @@ final class AnnotationCanvasView: NSView {
         return rect
     }
 
+    // MARK: 测量（不进入笔画、不导出）
+
+    /// 测量覆层：包围盒虚线 + 斜线 + 端点 + 原生像素尺寸标签。
+    /// 只在画布 `draw(_:)` 里调用，`compositeImage()` 不会走到这里，因此不会导出。
+    private func drawRuler(_ measurement: RulerMeasurement, in context: CGContext) {
+        let start = measurement.start
+        let end = measurement.end
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        guard hypot(dx, dy) >= 1 else { return }
+
+        let cgImage = image.cgImage
+        let scaleX = CGFloat(cgImage.width) / max(bounds.width, 1)
+        let scaleY = CGFloat(cgImage.height) / max(bounds.height, 1)
+        let pixelWidth = max(1, Int((abs(dx) * scaleX).rounded()))
+        let pixelHeight = max(1, Int((abs(dy) * scaleY).rounded()))
+        let diagonal = max(1, Int(hypot(dx * scaleX, dy * scaleY).rounded()))
+        let boundingRect = CGRect(
+            x: min(start.x, end.x),
+            y: min(start.y, end.y),
+            width: abs(dx),
+            height: abs(dy)
+        )
+
+        context.saveGState()
+        // 包围盒：白色细虚线，直观显示宽高对应的区域
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.35).cgColor)
+        context.setLineWidth(1)
+        context.setLineDash(phase: 0, lengths: [3, 3])
+        context.stroke(boundingRect)
+
+        // 斜线：先深色描边再白色虚线，深浅背景都清晰
+        context.setLineCap(.round)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.40).cgColor)
+        context.setLineWidth(3)
+        context.move(to: start)
+        context.addLine(to: end)
+        context.strokePath()
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor)
+        context.setLineWidth(1.4)
+        context.setLineDash(phase: 0, lengths: [5, 4])
+        context.move(to: start)
+        context.addLine(to: end)
+        context.strokePath()
+        context.setLineDash(phase: 0, lengths: [])
+
+        // 两个端点
+        for point in [start, end] {
+            let radius: CGFloat = 3.2
+            let dotRect = CGRect(
+                x: point.x - radius,
+                y: point.y - radius,
+                width: radius * 2,
+                height: radius * 2
+            )
+            context.setFillColor(NSColor.white.cgColor)
+            context.fillEllipse(in: dotRect)
+            context.setStrokeColor(NSColor.black.withAlphaComponent(0.40).cgColor)
+            context.setLineWidth(1)
+            context.strokeEllipse(in: dotRect)
+        }
+        context.restoreGState()
+
+        // 尺寸标签：宽 × 高 / 斜线长度，全部按截图原生像素换算
+        let lines = [
+            "宽 \(pixelWidth) × 高 \(pixelHeight) px",
+            "斜线 \(diagonal) px"
+        ]
+        drawRulerLabels(
+            lines,
+            near: CGPoint(x: boundingRect.midX, y: boundingRect.midY),
+            in: context
+        )
+    }
+
+    /// 测量标签：深色圆角胶囊 + 两行等宽数字，跟随测量中心并自动避免出画布。
+    private func drawRulerLabels(_ lines: [String], near center: CGPoint, in context: CGContext) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+        let lineHeight: CGFloat = 15
+        let paddingH: CGFloat = 9
+        let paddingV: CGFloat = 5
+        let textWidth = lines
+            .map { NSAttributedString(string: $0, attributes: attributes).size().width }
+            .max() ?? 0
+        let boxWidth = min(ceil(textWidth) + paddingH * 2, max(bounds.width - 12, 40))
+        let boxHeight = lineHeight * CGFloat(lines.count) + paddingV * 2
+        var originX = center.x + 14
+        var originY = center.y - boxHeight / 2
+        if originX + boxWidth > bounds.maxX - 6 {
+            originX = center.x - 14 - boxWidth
+        }
+        originX = min(max(originX, bounds.minX + 6), max(bounds.minX + 6, bounds.maxX - 6 - boxWidth))
+        originY = min(max(originY, bounds.minY + 6), max(bounds.minY + 6, bounds.maxY - 6 - boxHeight))
+        let boxRect = CGRect(x: originX, y: originY, width: boxWidth, height: boxHeight)
+
+        context.saveGState()
+        let path = CGPath(roundedRect: boxRect, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        context.addPath(path)
+        context.setFillColor(NSColor(srgbRed: 0.09, green: 0.08, blue: 0.08, alpha: 0.92).cgColor)
+        context.fillPath()
+        context.addPath(path)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
+        context.restoreGState()
+
+        let previous = NSGraphicsContext.current
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        for (index, line) in lines.enumerated() {
+            let attributed = NSAttributedString(string: line, attributes: attributes)
+            let rect = CGRect(
+                x: boxRect.minX + paddingH,
+                y: boxRect.maxY - paddingV - lineHeight * CGFloat(index + 1),
+                width: boxRect.width - paddingH * 2,
+                height: lineHeight
+            )
+            attributed.draw(in: rect)
+        }
+        NSGraphicsContext.current = previous
+    }
+
+    // MARK: 取色器（不进入笔画、不导出）
+
+    /// 点击画布 → 从原图取像素颜色，复制 #RRGGBB，并回调底部临时提示。
+    func pickAndCopyColor(at point: CGPoint) {
+        guard let picked = sampleColor(at: point) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(picked.hex, forType: .string)
+        onColorPicked?(picked.hex, picked.color)
+    }
+
+    /// 读取原图在指定画布点上的像素颜色（按原生像素取色，而不是缩放后的显示图）。
+    func sampleColor(at point: CGPoint) -> (hex: String, color: NSColor)? {
+        let cgImage = image.cgImage
+        guard cgImage.width > 0, cgImage.height > 0,
+              bounds.width > 0, bounds.height > 0 else { return nil }
+        // 画布显示坐标（原点左下、y 向上）→ 位图坐标（原点左上）
+        let pixelX = Int((point.x / bounds.width * CGFloat(cgImage.width)).rounded(.down))
+        let pixelY = Int(((bounds.height - point.y) / bounds.height * CGFloat(cgImage.height)).rounded(.down))
+        let x = min(max(pixelX, 0), cgImage.width - 1)
+        let y = min(max(pixelY, 0), cgImage.height - 1)
+        guard let cropped = cgImage.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)),
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let drawn = pixel.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.interpolationQuality = .none
+            context.draw(cropped, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return true
+        }
+        guard drawn else { return nil }
+        let color = NSColor(
+            srgbRed: CGFloat(pixel[0]) / 255,
+            green: CGFloat(pixel[1]) / 255,
+            blue: CGFloat(pixel[2]) / 255,
+            alpha: 1
+        )
+        let hex = String(format: "#%02X%02X%02X", Int(pixel[0]), Int(pixel[1]), Int(pixel[2]))
+        return (hex, color)
+    }
+
     /// 实心箭头（箭头长度随线宽变化）。
     private func drawArrowHead(from start: CGPoint, to tip: CGPoint, lineWidth: CGFloat, in context: CGContext) {
         let dx = tip.x - start.x
@@ -617,12 +908,27 @@ final class AnnotationCanvasView: NSView {
             return
         }
 
+        // 取色器：点击即取色 / 复制，不产生笔画
+        if tool == .eyedropper {
+            pickAndCopyColor(at: point)
+            return
+        }
+
+        // 测量：开始一次拖拽，松手后保留
+        if tool == .ruler {
+            activeRuler = RulerMeasurement(start: point, end: point)
+            committedRuler = nil
+            needsDisplay = true
+            return
+        }
+
         currentStroke = AnnotationStroke(
             tool: tool,
             points: [point],
             color: strokeColor,
             lineWidth: effectiveLineWidth(for: tool),
-            blurStyle: tool == .blur ? blurStyle : nil
+            blurStyle: tool == .blur ? blurStyle : nil,
+            spotlightStyle: tool == .spotlight ? spotlightStyle : nil
         )
         needsDisplay = true
     }
@@ -635,6 +941,18 @@ final class AnnotationCanvasView: NSView {
             return
         }
 
+        if tool == .eyedropper {
+            return
+        }
+
+        if tool == .ruler {
+            guard var ruler = activeRuler else { return }
+            ruler.end = point
+            activeRuler = ruler
+            needsDisplay = true
+            return
+        }
+
         guard var stroke = currentStroke else { return }
         switch stroke.tool {
         case .pen, .highlighter:
@@ -642,13 +960,13 @@ final class AnnotationCanvasView: NSView {
                 return
             }
             stroke.points.append(point)
-        case .line, .arrow, .rectangle, .blur:
+        case .line, .arrow, .rectangle, .blur, .spotlight:
             if stroke.points.count == 1 {
                 stroke.points.append(point)
             } else {
                 stroke.points[stroke.points.count - 1] = point
             }
-        case .text, .step, .eraser:
+        case .text, .step, .eraser, .eyedropper, .ruler:
             break
         }
         currentStroke = stroke
@@ -658,6 +976,19 @@ final class AnnotationCanvasView: NSView {
     override func mouseUp(with event: NSEvent) {
         if tool == .eraser {
             endEraseSession()
+            return
+        }
+        if tool == .eyedropper {
+            return
+        }
+        if tool == .ruler {
+            // 过滤误触：长度过短的拖拽不保留
+            if let ruler = activeRuler,
+               hypot(ruler.end.x - ruler.start.x, ruler.end.y - ruler.start.y) >= 2 {
+                committedRuler = ruler
+            }
+            activeRuler = nil
+            needsDisplay = true
             return
         }
         commitCurrentStroke()
@@ -891,11 +1222,11 @@ final class AnnotationCanvasView: NSView {
             let radius = AnnotationCanvasView.stepRadius(forLineWidth: stroke.lineWidth)
             return hypot(point.x - first.x, point.y - first.y) <= radius + 2
 
-        case .blur:
+        case .blur, .spotlight:
             guard let rect = normalizedRect(for: stroke) else { return false }
             return rect.contains(point)
 
-        case .eraser:
+        case .eyedropper, .ruler, .eraser:
             return false
         }
     }

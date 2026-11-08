@@ -98,6 +98,8 @@ final class AnnotationEditorController: NSWindowController {
     private var ocrRunning = false
     private var ocrResult: TextRecognitionResult?
     private var ocrPresentWhenReady = false
+    /// 进入取色 / 测量等瞬时工具之前的工具，Esc 退出时回到它
+    private var toolBeforeTransient: AnnotationStroke.Tool = .pen
 
     // MARK: 初始化
 
@@ -162,6 +164,10 @@ final class AnnotationEditorController: NSWindowController {
 
         canvas.onEditStateChanged = { [weak self] in
             self?.refreshToolbarState()
+        }
+        canvas.onColorPicked = { [weak self] hex, _ in
+            // 取色只做临时提示，不生成笔画、不参与导出
+            self?.workbenchView.showTemporaryHint("已复制颜色 \(hex)")
         }
 
         selectTool(.pen)
@@ -228,8 +234,22 @@ final class AnnotationEditorController: NSWindowController {
     // MARK: 选择状态
 
     func selectTool(_ tool: AnnotationStroke.Tool) {
+        let previous = canvasView.tool
+        // 记录进入取色 / 测量前使用的工具，退出瞬时工具时恢复
+        if previous != tool, !previous.isTransient {
+            toolBeforeTransient = previous
+        }
         canvasView.tool = tool
         toolbarView.setSelectedTool(tool)
+        workbenchView.updateHint(for: tool)
+    }
+
+    /// 取色 / 测量等瞬时工具按 Esc 时优先退出到上一个工具；返回是否消费了 Esc。
+    @discardableResult
+    private func exitTransientToolIfNeeded() -> Bool {
+        guard canvasView.tool.isTransient else { return false }
+        selectTool(toolBeforeTransient)
+        return true
     }
 
     func selectColor(_ color: NSColor) {
@@ -247,12 +267,21 @@ final class AnnotationEditorController: NSWindowController {
         refreshToolbarState()
     }
 
+    func selectSpotlightStyle(_ style: AnnotationStroke.SpotlightStyle) {
+        canvasView.spotlightStyle = style
+        refreshToolbarState()
+    }
+
     private func refreshToolbarState() {
         toolbarView.setSelectedTool(canvasView.tool)
         toolbarView.setSelectedColor(canvasView.strokeColor)
         toolbarView.setSelectedLineWidth(canvasView.lineWidth)
         toolbarView.setUndoRedo(canUndo: canvasView.canUndo, canRedo: canvasView.canRedo)
-        moreToolsController?.updateSelection(tool: canvasView.tool, blurStyle: canvasView.blurStyle)
+        moreToolsController?.updateSelection(
+            tool: canvasView.tool,
+            blurStyle: canvasView.blurStyle,
+            spotlightStyle: canvasView.spotlightStyle
+        )
     }
 
     private func focusWorkbench() {
@@ -266,6 +295,8 @@ final class AnnotationEditorController: NSWindowController {
     func handleKeyDown(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 53: // Esc
+            // 取色 / 测量等瞬时工具先退出到上一个工具，再按一次才取消编辑器
+            if exitTransientToolIfNeeded() { return true }
             cancel()
             return true
         case 36, 76: // Return / 小键盘 Enter
@@ -287,6 +318,9 @@ final class AnnotationEditorController: NSWindowController {
         case "t": selectTool(.text); return true
         case "n": selectTool(.step); return true
         case "b": selectTool(.blur); return true
+        case "g": selectTool(.spotlight); return true
+        case "i": selectTool(.eyedropper); return true
+        case "m": selectTool(.ruler); return true
         default: return false
         }
     }
@@ -420,7 +454,7 @@ final class AnnotationEditorController: NSWindowController {
 
     // MARK: 「更多工具」弹窗
 
-    /// 工具栏 ▸ 更多工具按钮：弹出文字 / 序号 / 模糊
+    /// 工具栏 ▸ 更多工具按钮：弹出文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量
     @objc func moreToolsButtonTapped(_ sender: NSButton) {
         let popover = ensureMoreToolsPopover()
         if popover.isShown {
@@ -428,7 +462,11 @@ final class AnnotationEditorController: NSWindowController {
             return
         }
         canvasView.endTextEditing()
-        moreToolsController?.updateSelection(tool: canvasView.tool, blurStyle: canvasView.blurStyle)
+        moreToolsController?.updateSelection(
+            tool: canvasView.tool,
+            blurStyle: canvasView.blurStyle,
+            spotlightStyle: canvasView.spotlightStyle
+        )
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
     }
 
@@ -450,6 +488,11 @@ final class AnnotationEditorController: NSWindowController {
             self.selectBlurStyle(style)
             self.focusWorkbench()
         }
+        content.onSpotlightStyleChanged = { [weak self] style in
+            guard let self else { return }
+            self.selectSpotlightStyle(style)
+            self.focusWorkbench()
+        }
         popover.contentViewController = content
         // 先完成 loadView，preferredContentSize 才是有效值；否则弹窗会以 0 尺寸显示
         content.loadViewIfNeeded()
@@ -467,6 +510,12 @@ final class AnnotationEditorController: NSWindowController {
         selectColor(AnnotationPalette.defaultColor)
         selectLineWidth(AnnotationPalette.defaultLineWidth)
         canvasView.setDebugStrokes(AnnotationEditorController.makeSampleStrokes(displaySize: metrics.displaySize))
+        // 预置一条测量结果，让截图能同时验证测量覆层（测量不进入导出）
+        let displaySize = metrics.displaySize
+        canvasView.debugSetRulerMeasurement(
+            start: CGPoint(x: displaySize.width * 0.18, y: displaySize.height * 0.40),
+            end: CGPoint(x: displaySize.width * 0.62, y: displaySize.height * 0.68)
+        )
         refreshToolbarState()
     }
 
@@ -527,7 +576,7 @@ final class AnnotationEditorController: NSWindowController {
         )
     }
 
-    /// 示例笔画：画笔曲线 / 直线 / 箭头 / 矩形 / 高亮各一条。
+    /// 示例笔画：画笔曲线 / 直线 / 箭头 / 矩形 / 高亮 + 扩展工具（模糊 / 文字 / 序号 / 聚光灯）。
     private static func makeSampleStrokes(displaySize: CGSize) -> [AnnotationStroke] {
         let width = max(displaySize.width, 1)
         let height = max(displaySize.height, 1)
@@ -598,6 +647,17 @@ final class AnnotationEditorController: NSWindowController {
                 color: colors[1],
                 lineWidth: 8,
                 stepNumber: 2
+            ),
+            // 聚光灯：覆盖几乎整幅图，只在四边压暗（圆角可见），不遮挡其他示例笔画
+            AnnotationStroke(
+                tool: .spotlight,
+                points: [
+                    CGPoint(x: width * 0.035, y: height * 0.035),
+                    CGPoint(x: width * 0.965, y: height * 0.965)
+                ],
+                color: colors[5],
+                lineWidth: 4,
+                spotlightStyle: .dark
             )
         ]
     }
@@ -617,6 +677,9 @@ final class AnnotationPanel: NSPanel {
 /// 深色工作台：绘制圆角背景、承载工具栏 / 画布 / 底部提示，并统一处理键盘。
 @MainActor
 final class AnnotationWorkbenchView: NSView {
+    /// 默认底部提示：压缩后的全量快捷键说明（宽度不够时尾部省略）
+    private static let defaultHint = "P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮 · T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量 · ⌘Z 撤销 · Enter 完成"
+
     weak var controller: AnnotationEditorController?
 
     private let canvas: AnnotationCanvasView
@@ -624,10 +687,14 @@ final class AnnotationWorkbenchView: NSView {
     private let hintLabel: NSTextField
     private let ocrButton = NSButton()
 
+    /// 当前工具 / 临时提示的失效令牌：避免旧 toast 的延时恢复覆盖新提示
+    private var currentTool: AnnotationStroke.Tool = .pen
+    private var hintToken = 0
+
     init(frame frameRect: NSRect, canvas: AnnotationCanvasView, toolbar: AnnotationToolbarView) {
         self.canvas = canvas
         self.toolbar = toolbar
-        self.hintLabel = NSTextField(labelWithString: "P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮擦 · T 文字 · N 序号 · B 模糊 · ⌘Z 撤销 · Enter 完成")
+        self.hintLabel = NSTextField(labelWithString: Self.defaultHint)
         super.init(frame: frameRect)
 
         hintLabel.font = PSTheme.text(11)
@@ -736,6 +803,42 @@ final class AnnotationWorkbenchView: NSView {
         controller?.ocrButtonTapped()
     }
 
+    // MARK: 底部提示
+
+    /// 切换工具时更新底部提示：瞬时工具给操作说明，其余显示压缩后的全量快捷键。
+    func updateHint(for tool: AnnotationStroke.Tool) {
+        currentTool = tool
+        hintToken += 1
+        let text: String
+        switch tool {
+        case .spotlight:
+            text = "拖拽框选聚光区域：区域外压暗、内部保持原亮度 · G"
+        case .eyedropper:
+            text = "点击画布任意位置取色，复制 #RRGGBB 到剪贴板 · Esc 退出"
+        case .ruler:
+            text = "拖拽测量宽 × 高与斜线长度（截图原生像素）· 切换工具清除"
+        default:
+            text = Self.defaultHint
+        }
+        setHint(text, color: AnnotationEditorColors.hint)
+    }
+
+    /// 临时提示（例如取色结果的色值）：显示一段时间后恢复当前工具的提示。
+    func showTemporaryHint(_ text: String, duration: TimeInterval = 1.8) {
+        hintToken += 1
+        let token = hintToken
+        setHint(text, color: PSTheme.accent)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.hintToken == token else { return }
+            self.updateHint(for: self.currentTool)
+        }
+    }
+
+    private func setHint(_ text: String, color: NSColor) {
+        hintLabel.stringValue = text
+        hintLabel.textColor = color
+    }
+
     /// 自动识别状态：更新底部右侧的 OCR 按钮。
     func setOCRStatus(_ status: OCRAutoStatus) {
         switch status {
@@ -824,14 +927,14 @@ final class AnnotationToolbarView: NSVisualEffectView {
             toolButtons.append(button)
         }
 
-        // 「更多工具」：文字 / 序号 / 模糊（NSPopover）
+        // 「更多工具」：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量（NSPopover）
         moreToolsButton = makeSymbolButton(
             symbol: "ellipsis.circle",
-            accessibilityLabel: "更多工具：文字 / 序号 / 模糊",
+            accessibilityLabel: "更多工具：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量",
             target: target,
             action: #selector(AnnotationEditorController.moreToolsButtonTapped(_:))
         )
-        moreToolsButton.toolTip = "更多工具（T 文字 · N 序号 · B 模糊）"
+        moreToolsButton.toolTip = "更多工具（T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量）"
         moreToolsButton.setAccessibilityLabel("更多工具")
         addSubview(moreToolsButton)
 
@@ -1328,55 +1431,84 @@ final class AnnotationWidthButton: NSButton {
 
 // MARK: - 「更多工具」弹窗
 
-/// 「更多工具」NSPopover 的内容：文字 / 序号 / 模糊 三行 + 模糊样式切换。
+/// 「更多工具」NSPopover 的内容：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量 六行，
+/// 下方再给出模糊样式与聚光灯样式的切换。
 @MainActor
 final class AnnotationMoreToolsViewController: NSViewController {
     /// 弹窗固定尺寸（与 loadView 里的容器一致）
-    static let preferredSize = NSSize(width: 212, height: 168)
+    static let preferredSize = NSSize(width: 212, height: 320)
 
     var onSelectTool: ((AnnotationStroke.Tool) -> Void)?
     var onBlurStyleChanged: ((AnnotationStroke.BlurStyle) -> Void)?
+    var onSpotlightStyleChanged: ((AnnotationStroke.SpotlightStyle) -> Void)?
+
+    private static let blurStyles: [AnnotationStroke.BlurStyle] = [.pixelate, .gaussian]
+    private static let spotlightStyles: [AnnotationStroke.SpotlightStyle] = [.dark, .light]
 
     private var rows: [AnnotationPopoverToolRowButton] = []
-    private var styleButtons: [AnnotationBlurStyleOptionButton] = []
-    private let styleLabel = NSTextField(labelWithString: "模糊样式")
+    private var blurStyleButtons: [AnnotationStyleOptionButton] = []
+    private var spotlightStyleButtons: [AnnotationStyleOptionButton] = []
+    private let blurStyleLabel = NSTextField(labelWithString: "模糊样式")
+    private let spotlightStyleLabel = NSTextField(labelWithString: "聚光灯")
     private let separator = NSView()
 
     override func loadView() {
-        let container = NSView(frame: NSRect(origin: .zero, size: Self.preferredSize))
+        let size = Self.preferredSize
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
         view = container
-        preferredContentSize = Self.preferredSize
+        preferredContentSize = size
 
-        var y = Self.preferredSize.height - 8 - 30
+        // 6 行工具：自上而下排列（顶部留 8、行高 30、行距 2）
+        var rowY = size.height - 8 - 30
         for tool in AnnotationStroke.Tool.extendedTools {
             let row = AnnotationPopoverToolRowButton(
                 tool: tool,
                 target: self,
                 action: #selector(rowTapped(_:))
             )
-            row.frame = NSRect(x: 8, y: y, width: Self.preferredSize.width - 16, height: 30)
+            row.frame = NSRect(x: 8, y: rowY, width: size.width - 16, height: 30)
             container.addSubview(row)
             rows.append(row)
-            y -= 32
+            rowY -= 32
         }
 
         separator.wantsLayer = true
         separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        separator.frame = NSRect(x: 10, y: 55, width: Self.preferredSize.width - 20, height: 1)
+        separator.frame = NSRect(x: 10, y: 114, width: size.width - 20, height: 1)
         container.addSubview(separator)
 
-        styleLabel.font = PSTheme.text(11)
-        styleLabel.textColor = NSColor.white.withAlphaComponent(0.45)
-        styleLabel.frame = NSRect(x: 10, y: 37, width: 120, height: 14)
-        container.addSubview(styleLabel)
+        configureStyleLabel(blurStyleLabel)
+        blurStyleLabel.frame = NSRect(x: 10, y: 92, width: 120, height: 14)
+        container.addSubview(blurStyleLabel)
+
+        configureStyleLabel(spotlightStyleLabel)
+        spotlightStyleLabel.frame = NSRect(x: 10, y: 38, width: 120, height: 14)
+        container.addSubview(spotlightStyleLabel)
 
         let gap: CGFloat = 6
-        let optionWidth = (Self.preferredSize.width - 16 - gap) / 2
-        for (index, style) in [AnnotationStroke.BlurStyle.pixelate, .gaussian].enumerated() {
-            let button = AnnotationBlurStyleOptionButton(
-                style: style,
+        let optionWidth = (size.width - 16 - gap) / 2
+        for (index, style) in Self.blurStyles.enumerated() {
+            let button = AnnotationStyleOptionButton(
+                title: style.title,
+                tag: style.rawValue,
                 target: self,
-                action: #selector(styleButtonTapped(_:))
+                action: #selector(blurStyleButtonTapped(_:))
+            )
+            button.frame = NSRect(
+                x: 8 + CGFloat(index) * (optionWidth + gap),
+                y: 62,
+                width: optionWidth,
+                height: 24
+            )
+            container.addSubview(button)
+            blurStyleButtons.append(button)
+        }
+        for (index, style) in Self.spotlightStyles.enumerated() {
+            let button = AnnotationStyleOptionButton(
+                title: style.title,
+                tag: style.rawValue,
+                target: self,
+                action: #selector(spotlightStyleButtonTapped(_:))
             )
             button.frame = NSRect(
                 x: 8 + CGFloat(index) * (optionWidth + gap),
@@ -1385,33 +1517,60 @@ final class AnnotationMoreToolsViewController: NSViewController {
                 height: 24
             )
             container.addSubview(button)
-            styleButtons.append(button)
+            spotlightStyleButtons.append(button)
         }
     }
 
-    /// 同步当前工具 / 模糊样式的高亮状态
-    func updateSelection(tool: AnnotationStroke.Tool, blurStyle: AnnotationStroke.BlurStyle) {
+    private func configureStyleLabel(_ label: NSTextField) {
+        label.font = PSTheme.text(11)
+        label.textColor = NSColor.white.withAlphaComponent(0.45)
+        label.isEditable = false
+        label.isSelectable = false
+    }
+
+    /// 同步当前工具 / 模糊样式 / 聚光灯样式的高亮状态；对应样式标签同步变橙。
+    func updateSelection(
+        tool: AnnotationStroke.Tool,
+        blurStyle: AnnotationStroke.BlurStyle,
+        spotlightStyle: AnnotationStroke.SpotlightStyle
+    ) {
         for row in rows {
             row.isSelected = row.tool == tool
         }
-        for button in styleButtons {
-            button.isSelected = button.style == blurStyle
+        for button in blurStyleButtons {
+            button.isSelected = button.tag == blurStyle.rawValue
         }
+        for button in spotlightStyleButtons {
+            button.isSelected = button.tag == spotlightStyle.rawValue
+        }
+        blurStyleLabel.textColor = tool == .blur
+            ? PSTheme.accent
+            : NSColor.white.withAlphaComponent(0.45)
+        spotlightStyleLabel.textColor = tool == .spotlight
+            ? PSTheme.accent
+            : NSColor.white.withAlphaComponent(0.45)
     }
 
     @objc private func rowTapped(_ sender: AnnotationPopoverToolRowButton) {
         onSelectTool?(sender.tool)
     }
 
-    @objc private func styleButtonTapped(_ sender: AnnotationBlurStyleOptionButton) {
-        onBlurStyleChanged?(sender.style)
+    @objc private func blurStyleButtonTapped(_ sender: AnnotationStyleOptionButton) {
+        guard let style = AnnotationStroke.BlurStyle(rawValue: sender.tag) else { return }
+        onBlurStyleChanged?(style)
+    }
+
+    @objc private func spotlightStyleButtonTapped(_ sender: AnnotationStyleOptionButton) {
+        guard let style = AnnotationStroke.SpotlightStyle(rawValue: sender.tag) else { return }
+        onSpotlightStyleChanged?(style)
     }
 }
 
-/// 「模糊样式」选项：马赛克 / 高斯模糊，选中态橙色。
+/// 「更多工具」弹窗里的样式选项（模糊样式 / 聚光灯样式），选中态橙色。
+/// 用 `tag` 承载样式 rawValue，由弹窗在回调里换算成具体样式。
 @MainActor
-final class AnnotationBlurStyleOptionButton: NSButton {
-    let style: AnnotationStroke.BlurStyle
+final class AnnotationStyleOptionButton: NSButton {
+    private let optionTitle: String
 
     private var isHovering = false
     private var trackingArea: NSTrackingArea?
@@ -1423,17 +1582,17 @@ final class AnnotationBlurStyleOptionButton: NSButton {
         }
     }
 
-    init(style: AnnotationStroke.BlurStyle, target: AnyObject, action: Selector) {
-        self.style = style
+    init(title: String, tag: Int, target: AnyObject, action: Selector) {
+        self.optionTitle = title
         super.init(frame: .zero)
+        self.tag = tag
         isBordered = false
         bezelStyle = .regularSquare
         focusRingType = .none
         setButtonType(.momentaryChange)
         wantsLayer = true
-        title = style.title
-        toolTip = style.title
-        setAccessibilityLabel(style.title)
+        toolTip = title
+        setAccessibilityLabel(title)
         self.target = target
         self.action = action
         updateTitle()
@@ -1447,7 +1606,7 @@ final class AnnotationBlurStyleOptionButton: NSButton {
 
     private func updateTitle() {
         attributedTitle = NSAttributedString(
-            string: style.title,
+            string: optionTitle,
             attributes: [
                 .font: PSTheme.text(11, weight: .medium),
                 .foregroundColor: isSelected ? PSTheme.accent : NSColor.white.withAlphaComponent(0.62)

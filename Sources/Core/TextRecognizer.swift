@@ -5,9 +5,10 @@ import Vision
 struct TextRecognitionResult {
     let text: String
     let lineCount: Int
+    let barcodeCount: Int
     let errorMessage: String?
 
-    static let empty = TextRecognitionResult(text: "", lineCount: 0, errorMessage: nil)
+    static let empty = TextRecognitionResult(text: "", lineCount: 0, barcodeCount: 0, errorMessage: nil)
 
     var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
@@ -25,10 +26,11 @@ enum TextRecognizer {
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+            let barcodeRequest = VNDetectBarcodesRequest()
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             do {
-                try handler.perform([request])
+                try handler.perform([request, barcodeRequest])
                 // 先按水平方向把文本行聚成「列」：主内容在左、侧栏在右时，
                 // 直接按 y 排序会把两列交错在一起；按列输出更符合阅读顺序。
                 struct RecognizedLine {
@@ -72,13 +74,31 @@ enum TextRecognizer {
 
                 let lines = ordered.map(\.text)
 
-                let text = lines.joined(separator: "\n")
+                let barcodes: [String] = (barcodeRequest.results ?? []).compactMap { observation in
+                    let payload = (observation.payloadStringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    return payload.isEmpty ? nil : payload
+                }
+
+                var text = lines.joined(separator: "\n")
+                if !barcodes.isEmpty {
+                    text += "\n\n[二维码 / 条码]\n" + barcodes.joined(separator: "\n")
+                }
                 DispatchQueue.main.async {
-                    completion(TextRecognitionResult(text: text, lineCount: lines.count, errorMessage: nil))
+                    completion(TextRecognitionResult(
+                        text: text,
+                        lineCount: lines.count,
+                        barcodeCount: barcodes.count,
+                        errorMessage: nil
+                    ))
                 }
             } catch {
                 DispatchQueue.main.async {
-                    completion(TextRecognitionResult(text: "", lineCount: 0, errorMessage: error.localizedDescription))
+                    completion(TextRecognitionResult(
+                        text: "",
+                        lineCount: 0,
+                        barcodeCount: 0,
+                        errorMessage: error.localizedDescription
+                    ))
                 }
             }
         }

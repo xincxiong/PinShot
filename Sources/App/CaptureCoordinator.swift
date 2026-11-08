@@ -159,35 +159,28 @@ final class CaptureCoordinator {
                 return
             }
             self.windowCandidates = candidates
-            let menu = NSMenu()
-            let header = NSMenuItem(title: "选择要截图的窗口", action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            menu.addItem(header)
-            for (index, candidate) in candidates.enumerated() {
-                let rawTitle = candidate.title.count > 64
-                    ? String(candidate.title.prefix(63)) + "…"
-                    : candidate.title
-                let item = NSMenuItem(
-                    title: "\(candidate.appName) — \(rawTitle)",
-                    action: #selector(CaptureCoordinator.windowCandidateSelected(_:)),
-                    keyEquivalent: ""
-                )
-                item.tag = index
-                item.target = self
-                if let icon = candidate.icon {
-                    item.image = icon
-                }
-                menu.addItem(item)
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "窗口截图"
+            alert.informativeText = "选择要截图的窗口："
+            let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 380, height: 28), pullsDown: false)
+            for candidate in candidates {
+                let rawTitle = candidate.title.count > 56 ? String(candidate.title.prefix(55)) + "…" : candidate.title
+                let title = "\(candidate.appName) — \(rawTitle)"
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                item.image = candidate.icon
+                popup.menu?.addItem(item)
             }
-            menu.addItem(.separator())
-            menu.addItem(NSMenuItem(title: "取消", action: nil, keyEquivalent: ""))
-            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+            alert.accessoryView = popup
+            alert.addButton(withTitle: "截图")
+            alert.addButton(withTitle: "取消")
+            NSApp.activate(ignoringOtherApps: true)
+            let response = alert.runModal()
+            guard response == .alertFirstButtonReturn else { return }
+            let index = popup.indexOfSelectedItem
+            guard index >= 0, index < self.windowCandidates.count else { return }
+            self.captureWindow(self.windowCandidates[index])
         }
-    }
-
-    @objc private func windowCandidateSelected(_ sender: NSMenuItem) {
-        guard sender.tag >= 0, sender.tag < windowCandidates.count else { return }
-        captureWindow(windowCandidates[sender.tag])
     }
 
     private func captureWindow(_ candidate: WindowCandidate) {

@@ -40,7 +40,7 @@ struct AnnotationStroke {
         }
     }
 
-    /// 工具类型：前 6 个是工具栏主工具，后 6 个是「更多工具」里的扩展工具。
+    /// 工具类型：前 6 个是工具栏主工具，后 7 个是「更多工具」里的扩展工具。
     enum Tool: Int, CaseIterable {
         case pen
         case line
@@ -54,24 +54,25 @@ struct AnnotationStroke {
         case spotlight
         case eyedropper
         case ruler
+        case loupe
 
         /// 工具栏主工具（保持 6 个不变）
         static let primaryTools: [Tool] = [.pen, .line, .arrow, .rectangle, .highlighter, .eraser]
         /// 「更多工具」弹窗中的扩展工具
-        static let extendedTools: [Tool] = [.text, .step, .blur, .spotlight, .eyedropper, .ruler]
+        static let extendedTools: [Tool] = [.text, .step, .blur, .spotlight, .eyedropper, .ruler, .loupe]
 
         /// 是否属于「更多工具」扩展组
         var isExtended: Bool {
             switch self {
-            case .text, .step, .blur, .spotlight, .eyedropper, .ruler: return true
+            case .text, .step, .blur, .spotlight, .eyedropper, .ruler, .loupe: return true
             default: return false
             }
         }
 
-        /// 是否是不产生持久笔画、只在画布上临时交互的工具（取色 / 测量）。
+        /// 是否是不产生持久笔画、只在画布上临时交互的工具（取色 / 测量 / 放大镜）。
         var isTransient: Bool {
             switch self {
-            case .eyedropper, .ruler: return true
+            case .eyedropper, .ruler, .loupe: return true
             default: return false
             }
         }
@@ -90,6 +91,7 @@ struct AnnotationStroke {
             case .spotlight: return "flashlight.on.fill"
             case .eyedropper: return "eyedropper"
             case .ruler: return "ruler"
+            case .loupe: return "magnifyingglass"
             }
         }
 
@@ -107,6 +109,7 @@ struct AnnotationStroke {
             case .spotlight: return "聚光灯"
             case .eyedropper: return "取色器"
             case .ruler: return "测量"
+            case .loupe: return "放大镜"
             }
         }
 
@@ -125,6 +128,7 @@ struct AnnotationStroke {
             case .spotlight: return "G"
             case .eyedropper: return "I"
             case .ruler: return "M"
+            case .loupe: return "Z"
             }
         }
     }
@@ -164,6 +168,84 @@ extension AnnotationStroke: Equatable {
     }
 }
 
+// MARK: - 背景板
+
+/// 导出背景板（Backdrop）设置：与笔画 / 撤销无关，只影响画布预览与导出合成。
+struct AnnotationBackdrop: Equatable {
+    /// 4 个预设底色
+    enum Preset: Int, CaseIterable {
+        case paper
+        case graphite
+        case white
+        case signalOrange
+
+        var title: String {
+            switch self {
+            case .paper: return "纸白"
+            case .graphite: return "石墨"
+            case .white: return "纯白"
+            case .signalOrange: return "信号橙"
+            }
+        }
+
+        var hex: String {
+            switch self {
+            case .paper: return "#F3F0E8"
+            case .graphite: return "#24282C"
+            case .white: return "#FFFFFF"
+            case .signalOrange: return "#E8551F"
+            }
+        }
+
+        var color: NSColor {
+            switch self {
+            case .paper:
+                return NSColor(srgbRed: 0xF3 / 255, green: 0xF0 / 255, blue: 0xE8 / 255, alpha: 1)
+            case .graphite:
+                return NSColor(srgbRed: 0x24 / 255, green: 0x28 / 255, blue: 0x2C / 255, alpha: 1)
+            case .white:
+                return .white
+            case .signalOrange:
+                return NSColor(srgbRed: 0xE8 / 255, green: 0x55 / 255, blue: 0x1F / 255, alpha: 1)
+            }
+        }
+
+        /// 浅色底用深色描边、深色底用白色描边
+        var isLight: Bool { self == .paper || self == .white }
+    }
+
+    /// 内边距档位：按图片短边像素的 6% / 9% / 12%
+    enum Padding: Int, CaseIterable {
+        case narrow
+        case medium
+        case wide
+
+        var title: String {
+            switch self {
+            case .narrow: return "窄"
+            case .medium: return "中"
+            case .wide: return "宽"
+            }
+        }
+
+        var ratio: CGFloat {
+            switch self {
+            case .narrow: return 0.06
+            case .medium: return 0.09
+            case .wide: return 0.12
+            }
+        }
+
+        var caption: String { "内边距 \(Int((ratio * 100).rounded()))%" }
+    }
+
+    var isEnabled = false
+    var preset: Preset = .graphite
+    var padding: Padding = .medium
+    var rounded = true
+    var shadow = true
+}
+
 // MARK: - 画布
 
 /// 标注画布：显示（可能被缩放的）截图 + 所有笔画 + 实时预览，并负责鼠标绘制、橡皮擦与撤销栈。
@@ -176,8 +258,9 @@ final class AnnotationCanvasView: NSView {
     // MARK: 配置
 
     let image: PinnedImage
-    /// 画布在屏幕上的显示尺寸（pt）；可能小于 image.pointSize
-    let displaySize: CGSize
+    /// 画布在屏幕上的显示尺寸（pt）；可能小于 image.pointSize。
+    /// 背景板开关会等比缩放该尺寸（同时缩放已有笔画），保证标注仍与图片对齐。
+    private(set) var displaySize: CGSize
 
     /// 当前工具
     var tool: AnnotationStroke.Tool = .pen {
@@ -187,7 +270,10 @@ final class AnnotationCanvasView: NSView {
                 currentStroke = nil
                 activeRuler = nil
                 committedRuler = nil
+                loupePoint = nil
             }
+            // 放大镜需要持续接收 mouseMoved
+            window?.acceptsMouseMovedEvents = (tool == .loupe)
             window?.invalidateCursorRects(for: self)
             needsDisplay = true
         }
@@ -201,6 +287,28 @@ final class AnnotationCanvasView: NSView {
     /// 聚光灯当前样式（压暗 / 提亮），由「更多工具」弹窗切换
     var spotlightStyle: AnnotationStroke.SpotlightStyle = .dark {
         didSet { needsDisplay = true }
+    }
+    /// 背景板设置（预览由工作台绘制、导出由 compositeImage 合成；与撤销无关）
+    var backdrop = AnnotationBackdrop() {
+        didSet {
+            guard backdrop != oldValue else { return }
+            applyBackdropAppearance()
+            needsDisplay = true
+        }
+    }
+
+    /// 画布上图片区域的圆角（显示 pt）：背景板关闭保持 8；开启后由「圆角」开关决定
+    var imageCornerRadius: CGFloat {
+        backdrop.isEnabled && !backdrop.rounded ? 0 : 8
+    }
+    /// 背景板卡片圆角（显示 pt）
+    var backdropCardCornerRadius: CGFloat {
+        backdrop.isEnabled && backdrop.rounded ? 14 : 0
+    }
+    /// 背景板在画布外围的内边距（显示 pt，按短边比例）；关闭时为 0
+    var backdropPaddingDisplay: CGFloat {
+        guard backdrop.isEnabled else { return 0 }
+        return (min(displaySize.width, displaySize.height) * backdrop.padding.ratio).rounded()
     }
 
     /// 笔画/撤销状态变化时回调（刷新工具栏按钮）
@@ -226,6 +334,10 @@ final class AnnotationCanvasView: NSView {
     private var activeRuler: RulerMeasurement?
     private var committedRuler: RulerMeasurement?
 
+    /// 放大镜当前取样点（画布显示坐标）；仅显示、不进入笔画、不导出
+    private(set) var loupePoint: CGPoint?
+    private var loupeTrackingArea: NSTrackingArea?
+
     // 文字工具的内联输入框状态
     private var textEditor: NSTextField?
     private var textEditAnchor: CGPoint = .zero
@@ -248,7 +360,6 @@ final class AnnotationCanvasView: NSView {
     private static let blurCacheByteLimit = 64 * 1024 * 1024
     private lazy var ciContext = CIContext()
 
-    private let cornerRadius: CGFloat = 8
     private let nsImage: NSImage
     private lazy var eraserCursor: NSCursor = AnnotationCanvasView.makeEraserCursor()
 
@@ -261,7 +372,7 @@ final class AnnotationCanvasView: NSView {
         super.init(frame: frameRect)
 
         wantsLayer = true
-        layer?.cornerRadius = cornerRadius
+        layer?.cornerRadius = imageCornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
         layer?.contentsScale = window?.backingScaleFactor
@@ -320,6 +431,8 @@ final class AnnotationCanvasView: NSView {
         layer?.contentsScale = window?.backingScaleFactor
             ?? NSScreen.main?.backingScaleFactor
             ?? 2
+        layer?.cornerRadius = imageCornerRadius
+        window?.acceptsMouseMovedEvents = (tool == .loupe)
         window?.invalidateCursorRects(for: self)
     }
 
@@ -330,8 +443,8 @@ final class AnnotationCanvasView: NSView {
         context.saveGState()
         let clip = CGPath(
             roundedRect: bounds,
-            cornerWidth: cornerRadius,
-            cornerHeight: cornerRadius,
+            cornerWidth: imageCornerRadius,
+            cornerHeight: imageCornerRadius,
             transform: nil
         )
         context.addPath(clip)
@@ -361,14 +474,25 @@ final class AnnotationCanvasView: NSView {
             drawRuler(ruler, in: context)
         }
 
-        // 画布描边：1px 白色 10%
+        // 放大镜覆层：鼠标移动时跟随，只显示、不导出（导出只走 draw(stroke:)）
+        if let loupePoint {
+            drawLoupe(at: loupePoint, in: context)
+        }
+
+        // 画布描边：深色底 1px 白色 10%，浅色背景板上用深色描边
+        let borderColor: NSColor
+        if backdrop.isEnabled && backdrop.preset.isLight {
+            borderColor = NSColor.black.withAlphaComponent(0.10)
+        } else {
+            borderColor = NSColor.white.withAlphaComponent(0.10)
+        }
         let border = NSBezierPath(
             roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-            xRadius: cornerRadius,
-            yRadius: cornerRadius
+            xRadius: imageCornerRadius,
+            yRadius: imageCornerRadius
         )
         border.lineWidth = 1
-        NSColor.white.withAlphaComponent(0.10).setStroke()
+        borderColor.setStroke()
         border.stroke()
     }
 
@@ -447,8 +571,8 @@ final class AnnotationCanvasView: NSView {
             drawSpotlight(stroke, in: context)
             return
 
-        case .eyedropper, .ruler:
-            // 瞬时工具不产生持久笔画；测量覆层由 drawRuler 单独绘制
+        case .eyedropper, .ruler, .loupe:
+            // 瞬时工具不产生持久笔画；测量 / 放大镜覆层单独绘制
             break
 
         case .eraser:
@@ -838,6 +962,201 @@ final class AnnotationCanvasView: NSView {
         return (hex, color)
     }
 
+    // MARK: 放大镜 / 对比度（不进入笔画、不导出）
+
+    /// WCAG 相对亮度 → 对白 / 对黑对比度（1...21）。
+    static func wcagContrastRatios(for color: NSColor) -> (white: CGFloat, black: CGFloat) {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return (1, 1) }
+        func linear(_ value: CGFloat) -> CGFloat {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear(rgb.redComponent)
+            + 0.7152 * linear(rgb.greenComponent)
+            + 0.0722 * linear(rgb.blueComponent)
+        let white = 1.05 / (luminance + 0.05)
+        let black = (luminance + 0.05) / 0.05
+        return (white, black)
+    }
+
+    /// 放大镜：在远离取样点的角落显示 4–8x 最近邻放大、中心像素高亮，
+    /// 并显示 hex / RGB 与对白、对黑的 WCAG 对比度。
+    private func drawLoupe(at samplePoint: CGPoint, in context: CGContext) {
+        guard let sample = sampleColor(at: samplePoint) else { return }
+        let cgImage = image.cgImage
+        guard cgImage.width > 0, cgImage.height > 0,
+              bounds.width > 4, bounds.height > 4 else { return }
+
+        let nativeScale = (CGFloat(cgImage.width) / bounds.width
+            + CGFloat(cgImage.height) / bounds.height) / 2
+        let zoom = min(8, max(4, (nativeScale * 3).rounded()))
+        let side = min(140, max(72, min(bounds.width, bounds.height) * 0.7))
+        let margin: CGFloat = 12
+        // 在四角中选离取样点最远的一个，避免遮住正在检查的位置
+        let cornerCandidates = [
+            CGPoint(x: bounds.minX + margin, y: bounds.minY + margin),
+            CGPoint(x: bounds.maxX - margin - side, y: bounds.minY + margin),
+            CGPoint(x: bounds.minX + margin, y: bounds.maxY - margin - side),
+            CGPoint(x: bounds.maxX - margin - side, y: bounds.maxY - margin - side)
+        ]
+        let halfSide = side / 2
+        let bestCorner = cornerCandidates.max { lhs, rhs in
+            let lhsDistance = hypot(lhs.x + halfSide - samplePoint.x, lhs.y + halfSide - samplePoint.y)
+            let rhsDistance = hypot(rhs.x + halfSide - samplePoint.x, rhs.y + halfSide - samplePoint.y)
+            return lhsDistance < rhsDistance
+        } ?? cornerCandidates[0]
+        let loupeRect = CGRect(x: bestCorner.x, y: bestCorner.y, width: side, height: side)
+
+        // 取样点 → 源像素（位图坐标原点左上）
+        let pixelX = min(
+            max(Int((samplePoint.x / bounds.width * CGFloat(cgImage.width)).rounded(.down)), 0),
+            cgImage.width - 1
+        )
+        let pixelY = min(
+            max(Int(((bounds.height - samplePoint.y) / bounds.height * CGFloat(cgImage.height)).rounded(.down)), 0),
+            cgImage.height - 1
+        )
+
+        // 放大窗口取奇数个源像素，让中心像素正好落在镜片中心
+        var span = max(3, Int((side / zoom).rounded()))
+        if span % 2 == 0 { span += 1 }
+        span = min(span, min(cgImage.width, cgImage.height))
+        if span % 2 == 0 { span = max(1, span - 1) }
+        let cropX = min(max(pixelX - span / 2, 0), max(0, cgImage.width - span))
+        let cropY = min(max(pixelY - span / 2, 0), max(0, cgImage.height - span))
+        guard let cropped = cgImage.cropping(
+            to: CGRect(x: cropX, y: cropY, width: span, height: span)
+        ) else { return }
+
+        // 画布上的取样点标记
+        drawLoupeSampleMarker(at: samplePoint, in: context)
+
+        // 圆形镜片：阴影 → 黑色底 → 圆形裁剪 → 最近邻放大
+        context.saveGState()
+        context.setShadow(
+            offset: CGSize(width: 0, height: -3),
+            blur: 10,
+            color: NSColor.black.withAlphaComponent(0.45).cgColor
+        )
+        context.setFillColor(NSColor.black.cgColor)
+        context.fillEllipse(in: loupeRect)
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+        context.addEllipse(in: loupeRect)
+        context.clip()
+        context.interpolationQuality = .none
+        context.draw(cropped, in: loupeRect)
+
+        // 中心像素高亮（白色 + 黑色双层描边）
+        let pixelSide = side / CGFloat(span)
+        let centerX = loupeRect.minX + (CGFloat(pixelX - cropX) + 0.5) * pixelSide
+        let centerY = loupeRect.maxY - (CGFloat(pixelY - cropY) + 0.5) * pixelSide
+        let pixelRect = CGRect(
+            x: centerX - pixelSide / 2,
+            y: centerY - pixelSide / 2,
+            width: pixelSide,
+            height: pixelSide
+        )
+        context.setLineWidth(1.5)
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.stroke(pixelRect)
+        context.setLineWidth(1)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.85).cgColor)
+        context.stroke(pixelRect.insetBy(dx: -1, dy: -1))
+        context.restoreGState()
+
+        // 外圈双色描边
+        context.saveGState()
+        context.setLineWidth(2)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor)
+        context.strokeEllipse(in: loupeRect.insetBy(dx: 1, dy: 1))
+        context.setLineWidth(1)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.35).cgColor)
+        context.strokeEllipse(in: loupeRect.insetBy(dx: 0.5, dy: 0.5))
+        context.restoreGState()
+
+        // 信息胶囊：放大倍数 / hex / RGB / 对白黑对比度
+        let ratios = AnnotationCanvasView.wcagContrastRatios(for: sample.color)
+        let rgb = sample.color.usingColorSpace(.sRGB) ?? sample.color
+        let red = Int((rgb.redComponent * 255).rounded())
+        let green = Int((rgb.greenComponent * 255).rounded())
+        let blue = Int((rgb.blueComponent * 255).rounded())
+        let lines = [
+            "\(Int(zoom))×  \(sample.hex)  RGB \(red),\(green),\(blue)",
+            "对白 \(String(format: "%.1f", ratios.white)):1 · 对黑 \(String(format: "%.1f", ratios.black)):1"
+        ]
+        drawLoupeBadge(lines, near: loupeRect, in: context)
+    }
+
+    /// 取样点：白色 + 黑色两遍十字线，任意截图底色上都可见。
+    private func drawLoupeSampleMarker(at point: CGPoint, in context: CGContext) {
+        let arm: CGFloat = 7
+        context.saveGState()
+        context.setLineWidth(3)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.5).cgColor)
+        context.move(to: CGPoint(x: point.x - arm, y: point.y))
+        context.addLine(to: CGPoint(x: point.x + arm, y: point.y))
+        context.move(to: CGPoint(x: point.x, y: point.y - arm))
+        context.addLine(to: CGPoint(x: point.x, y: point.y + arm))
+        context.strokePath()
+        context.setLineWidth(1.2)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor)
+        context.move(to: CGPoint(x: point.x - arm, y: point.y))
+        context.addLine(to: CGPoint(x: point.x + arm, y: point.y))
+        context.move(to: CGPoint(x: point.x, y: point.y - arm))
+        context.addLine(to: CGPoint(x: point.x, y: point.y + arm))
+        context.strokePath()
+        context.restoreGState()
+    }
+
+    /// 放大镜信息胶囊：放在镜片下方（空间不足时放上方），始终留在画布内。
+    private func drawLoupeBadge(_ lines: [String], near loupeRect: CGRect, in context: CGContext) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+        let lineHeight: CGFloat = 13
+        let paddingH: CGFloat = 8
+        let paddingV: CGFloat = 4
+        let textWidth = lines
+            .map { NSAttributedString(string: $0, attributes: attributes).size().width }
+            .max() ?? 0
+        let boxWidth = min(ceil(textWidth) + paddingH * 2, max(bounds.width - 12, 60))
+        let boxHeight = lineHeight * CGFloat(lines.count) + paddingV * 2
+        var originX = loupeRect.midX - boxWidth / 2
+        var originY = loupeRect.minY - 6 - boxHeight
+        if originY < bounds.minY + 6 {
+            originY = loupeRect.maxY + 6
+        }
+        originX = min(max(originX, bounds.minX + 6), max(bounds.minX + 6, bounds.maxX - 6 - boxWidth))
+        originY = min(max(originY, bounds.minY + 6), max(bounds.minY + 6, bounds.maxY - 6 - boxHeight))
+        let boxRect = CGRect(x: originX, y: originY, width: boxWidth, height: boxHeight)
+
+        context.saveGState()
+        let path = CGPath(roundedRect: boxRect, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        context.addPath(path)
+        context.setFillColor(NSColor(srgbRed: 0.09, green: 0.08, blue: 0.08, alpha: 0.92).cgColor)
+        context.fillPath()
+        context.addPath(path)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.16).cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
+        context.restoreGState()
+
+        let previous = NSGraphicsContext.current
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        for (index, line) in lines.enumerated() {
+            let attributed = NSAttributedString(string: line, attributes: attributes)
+            let rect = CGRect(
+                x: boxRect.minX + paddingH,
+                y: boxRect.maxY - paddingV - lineHeight * CGFloat(index + 1),
+                width: boxRect.width - paddingH * 2,
+                height: lineHeight
+            )
+            attributed.draw(in: rect)
+        }
+        NSGraphicsContext.current = previous
+    }
+
     /// 实心箭头（箭头长度随线宽变化）。
     private func drawArrowHead(from start: CGPoint, to tip: CGPoint, lineWidth: CGFloat, in context: CGContext) {
         let dx = tip.x - start.x
@@ -876,6 +1195,94 @@ final class AnnotationCanvasView: NSView {
         default: cursor = .crosshair
         }
         addCursorRect(bounds, cursor: cursor)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let loupeTrackingArea {
+            removeTrackingArea(loupeTrackingArea)
+        }
+        // 放大镜依赖 mouseMoved 实时更新取样点；其它工具下事件被忽略
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        loupeTrackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard tool == .loupe else { return }
+        loupePoint = clampPoint(convert(event.locationInWindow, from: nil))
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard tool == .loupe else { return }
+        loupePoint = nil
+        needsDisplay = true
+    }
+
+    /// 调试 / 离屏渲染：预置放大镜取样点（不生成笔画，仅用于截图自检）。
+    func debugSetLoupePoint(_ point: CGPoint?) {
+        loupePoint = point
+        needsDisplay = true
+    }
+
+    // MARK: 背景板布局 / 导出
+
+    /// 背景板圆角变化后同步图片图层裁切圆角（预览用）。
+    private func applyBackdropAppearance() {
+        layer?.cornerRadius = imageCornerRadius
+    }
+
+    /// 背景板开关 / 档位变化时调整画布显示尺寸：已有笔画等比缩放，
+    /// 保证标注仍与图片严格对齐，导出比例不变。
+    func setDisplaySize(_ newSize: CGSize) {
+        guard newSize.width >= 1, newSize.height >= 1 else { return }
+        let old = displaySize
+        guard old.width >= 1, old.height >= 1 else {
+            displaySize = newSize
+            needsDisplay = true
+            return
+        }
+        let scaleX = newSize.width / old.width
+        let scaleY = newSize.height / old.height
+        guard abs(scaleX - 1) > 0.0005 || abs(scaleY - 1) > 0.0005 else { return }
+        let uniformScale = (scaleX + scaleY) / 2
+
+        func scaledPoint(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: point.x * scaleX, y: point.y * scaleY)
+        }
+        func scaledStroke(_ stroke: AnnotationStroke) -> AnnotationStroke {
+            var copy = stroke
+            copy.points = stroke.points.map(scaledPoint)
+            copy.lineWidth *= uniformScale
+            return copy
+        }
+        func scaledRuler(_ ruler: RulerMeasurement) -> RulerMeasurement {
+            RulerMeasurement(start: scaledPoint(ruler.start), end: scaledPoint(ruler.end))
+        }
+
+        strokes = strokes.map(scaledStroke)
+        undoStack = undoStack.map { $0.map(scaledStroke) }
+        redoStack = redoStack.map { $0.map(scaledStroke) }
+        if let current = currentStroke { currentStroke = scaledStroke(current) }
+        if let snapshot = eraseSnapshot { eraseSnapshot = snapshot.map(scaledStroke) }
+        if let ruler = activeRuler { activeRuler = scaledRuler(ruler) }
+        if let ruler = committedRuler { committedRuler = scaledRuler(ruler) }
+        if let point = loupePoint { loupePoint = scaledPoint(point) }
+        // 模糊缓存按显示坐标做键，尺寸变化后全部失效
+        blurCache.removeAll()
+        blurCacheOrder.removeAll()
+        blurCacheBytes = 0
+
+        displaySize = newSize
+        frame = NSRect(origin: frame.origin, size: newSize)
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -922,6 +1329,14 @@ final class AnnotationCanvasView: NSView {
             return
         }
 
+        // 放大镜：点击复制当前像素 #RRGGBB，不产生笔画
+        if tool == .loupe {
+            loupePoint = point
+            pickAndCopyColor(at: point)
+            needsDisplay = true
+            return
+        }
+
         currentStroke = AnnotationStroke(
             tool: tool,
             points: [point],
@@ -941,7 +1356,7 @@ final class AnnotationCanvasView: NSView {
             return
         }
 
-        if tool == .eyedropper {
+        if tool == .eyedropper || tool == .loupe {
             return
         }
 
@@ -966,7 +1381,7 @@ final class AnnotationCanvasView: NSView {
             } else {
                 stroke.points[stroke.points.count - 1] = point
             }
-        case .text, .step, .eraser, .eyedropper, .ruler:
+        case .text, .step, .eraser, .eyedropper, .ruler, .loupe:
             break
         }
         currentStroke = stroke
@@ -978,7 +1393,7 @@ final class AnnotationCanvasView: NSView {
             endEraseSession()
             return
         }
-        if tool == .eyedropper {
+        if tool == .eyedropper || tool == .loupe {
             return
         }
         if tool == .ruler {
@@ -1226,7 +1641,7 @@ final class AnnotationCanvasView: NSView {
             guard let rect = normalizedRect(for: stroke) else { return false }
             return rect.contains(point)
 
-        case .eyedropper, .ruler, .eraser:
+        case .eyedropper, .ruler, .loupe, .eraser:
             return false
         }
     }
@@ -1269,8 +1684,18 @@ final class AnnotationCanvasView: NSView {
 
     // MARK: 导出
 
-    /// 以原生像素分辨率合成「原图 + 所有笔画」，pointSize 保持原图点尺寸。
+    /// 以原生像素分辨率合成「原图 + 所有笔画」；开启背景板时再合成背景板外框。
+    /// 未开启背景板时 pointSize 保持原图点尺寸；开启时按内边距等比放大。
     func compositeImage() -> PinnedImage? {
+        guard let annotated = compositeAnnotatedImage() else { return nil }
+        guard backdrop.isEnabled else {
+            return PinnedImage(cgImage: annotated, pointSize: image.pointSize)
+        }
+        return compositeBackdropImage(annotated)
+    }
+
+    /// 「原图 + 所有笔画」的原生像素图（不含背景板）。
+    private func compositeAnnotatedImage() -> CGImage? {
         let cgImage = image.cgImage
         let pixelWidth = cgImage.width
         let pixelHeight = cgImage.height
@@ -1302,8 +1727,111 @@ final class AnnotationCanvasView: NSView {
         }
         context.restoreGState()
 
+        return context.makeImage()
+    }
+
+    /// 背景板合成：底色铺满 → 图片圆角 + 柔和阴影 → 标注图。
+    /// 内边距按图片短边像素的 6% / 9% / 12%。
+    private func compositeBackdropImage(_ annotated: CGImage) -> PinnedImage? {
+        let pixelWidth = annotated.width
+        let pixelHeight = annotated.height
+        guard pixelWidth > 0, pixelHeight > 0,
+              bounds.width > 0, bounds.height > 0 else { return nil }
+
+        let ratio = backdrop.padding.ratio
+        let padPixels = max(1, Int((CGFloat(min(pixelWidth, pixelHeight)) * ratio).rounded()))
+        let outputWidth = pixelWidth + padPixels * 2
+        let outputHeight = pixelHeight + padPixels * 2
+        let colorSpace = annotated.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)
+            ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: outputWidth,
+            height: outputHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        context.interpolationQuality = .high
+        let imageRect = CGRect(
+            x: padPixels,
+            y: padPixels,
+            width: pixelWidth,
+            height: pixelHeight
+        )
+        let pixelScale = CGFloat(pixelWidth) / bounds.width
+        let imageRadius = backdrop.rounded ? max(1, imageCornerRadius * pixelScale) : 0
+
+        // 1. 底色
+        context.setFillColor(backdrop.preset.color.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: outputWidth, height: outputHeight))
+
+        // 2. 图片阴影：用底色填充圆角矩形，只露出柔和阴影
+        if backdrop.shadow {
+            context.saveGState()
+            let shadowRadius = max(4, CGFloat(padPixels) * 0.55)
+            context.setShadow(
+                offset: CGSize(width: 0, height: -max(2, CGFloat(padPixels) * 0.12)),
+                blur: shadowRadius,
+                color: NSColor.black.withAlphaComponent(0.32).cgColor
+            )
+            context.setFillColor(backdrop.preset.color.cgColor)
+            let shadowPath = CGPath(
+                roundedRect: imageRect,
+                cornerWidth: imageRadius,
+                cornerHeight: imageRadius,
+                transform: nil
+            )
+            context.addPath(shadowPath)
+            context.fillPath()
+            context.restoreGState()
+        }
+
+        // 3. 标注图：圆角裁切后绘制
+        context.saveGState()
+        if imageRadius > 0.5 {
+            let clip = CGPath(
+                roundedRect: imageRect,
+                cornerWidth: imageRadius,
+                cornerHeight: imageRadius,
+                transform: nil
+            )
+            context.addPath(clip)
+            context.clip()
+        }
+        context.draw(annotated, in: imageRect)
+        context.restoreGState()
+
+        // 4. 图片 1px 描边，浅色底用深色、深色底用白色
+        if imageRadius > 0.5 {
+            let borderColor = backdrop.preset.isLight
+                ? NSColor.black.withAlphaComponent(0.10)
+                : NSColor.white.withAlphaComponent(0.12)
+            context.saveGState()
+            context.setStrokeColor(borderColor.cgColor)
+            context.setLineWidth(max(1, pixelScale))
+            let borderPath = CGPath(
+                roundedRect: imageRect.insetBy(dx: pixelScale / 2, dy: pixelScale / 2),
+                cornerWidth: max(0, imageRadius - pixelScale / 2),
+                cornerHeight: max(0, imageRadius - pixelScale / 2),
+                transform: nil
+            )
+            context.addPath(borderPath)
+            context.strokePath()
+            context.restoreGState()
+        }
+
         guard let output = context.makeImage() else { return nil }
-        return PinnedImage(cgImage: output, pointSize: image.pointSize)
+        // padPixels 换算回点：按原图 native scale 反算，保持贴图尺寸语义
+        let pointScale = image.pointSize.width / CGFloat(pixelWidth)
+        let pointPadding = CGFloat(padPixels) * pointScale
+        let outputPointSize = CGSize(
+            width: image.pointSize.width + pointPadding * 2,
+            height: image.pointSize.height + pointPadding * 2
+        )
+        return PinnedImage(cgImage: output, pointSize: outputPointSize)
     }
 
     // MARK: 橡皮擦圆形光标

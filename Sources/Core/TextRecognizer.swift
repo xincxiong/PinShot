@@ -5,10 +5,11 @@ import Vision
 struct TextRecognitionResult {
     let text: String
     let lineCount: Int
-    let barcodeCount: Int
+    let barcodes: [String]
     let errorMessage: String?
 
-    static let empty = TextRecognitionResult(text: "", lineCount: 0, barcodeCount: 0, errorMessage: nil)
+    var barcodeCount: Int { barcodes.count }
+    static let empty = TextRecognitionResult(text: "", lineCount: 0, barcodes: [], errorMessage: nil)
 
     var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 }
@@ -87,7 +88,7 @@ enum TextRecognizer {
                     completion(TextRecognitionResult(
                         text: text,
                         lineCount: lines.count,
-                        barcodeCount: barcodes.count,
+                        barcodes: barcodes,
                         errorMessage: nil
                     ))
                 }
@@ -96,7 +97,7 @@ enum TextRecognizer {
                     completion(TextRecognitionResult(
                         text: "",
                         lineCount: 0,
-                        barcodeCount: 0,
+                        barcodes: [],
                         errorMessage: error.localizedDescription
                     ))
                 }

@@ -11,6 +11,7 @@ final class OCRPanelController: NSWindowController, NSWindowDelegate {
     private let panel: OCRPanel
     private var keyMonitor: Any?
     private var currentText = ""
+    private var currentBarcodes: [String] = []
     private var sourceTitle = "识别文字"
     private var isRecognizing = false
 
@@ -62,6 +63,7 @@ final class OCRPanelController: NSWindowController, NSWindowDelegate {
                 return
             }
             self.currentText = result.text
+            self.currentBarcodes = result.barcodes
             if result.isEmpty {
                 self.content.show(text: "", status: "没有识别到文字，可以换一张更清晰的截图试试。", busy: false, copyEnabled: false)
             } else {
@@ -80,6 +82,7 @@ final class OCRPanelController: NSWindowController, NSWindowDelegate {
     func present(text: String, title: String = "识别文字") {
         sourceTitle = title
         currentText = text
+        currentBarcodes = []
         isRecognizing = false
         panel.title = title
         panel.makeKeyAndOrderFront(nil)
@@ -178,6 +181,7 @@ private final class OCRPanelContentView: NSView {
     private let statusLabel = NSTextField(labelWithString: "")
     private let copyButton = PinButton(title: "复制全文", style: .primary)
     private let closeButton = PinButton(title: "关闭", style: .secondary)
+    private let barcodeButton = PinButton(title: "复制二维码", style: .secondary)
     private let emptyLabel = NSTextField(labelWithString: "没有识别到文字")
     private let spinner = NSProgressIndicator()
 
@@ -243,7 +247,13 @@ private final class OCRPanelContentView: NSView {
         closeButton.buttonFont = PSTheme.text(12.5)
         closeButton.contentInset = NSSize(width: 14, height: 7)
 
-        for view in [titleLabel, subtitleLabel, scrollView, statusLabel, copyButton, closeButton, spinner] {
+        barcodeButton.target = self
+        barcodeButton.action = #selector(copyBarcodeTapped)
+        barcodeButton.buttonFont = PSTheme.text(12.5)
+        barcodeButton.contentInset = NSSize(width: 12, height: 7)
+        barcodeButton.isHidden = true
+
+        for view in [titleLabel, subtitleLabel, scrollView, statusLabel, copyButton, closeButton, barcodeButton, spinner] {
             addSubview(view)
         }
         addSubview(emptyLabel) // 放到 scrollView 之上
@@ -281,17 +291,26 @@ private final class OCRPanelContentView: NSView {
 
         closeButton.frame = NSRect(x: width - inset - 68, y: 14, width: 68, height: 28)
         copyButton.frame = NSRect(x: width - inset - 68 - 8 - 88, y: 14, width: 88, height: 28)
+        barcodeButton.frame = NSRect(x: width - inset - 68 - 8 - 88 - 8 - 96, y: 14, width: 96, height: 28)
+        let statusRight = barcodeButton.isHidden
+            ? width - inset - 68 - 88 - 8 - 8
+            : barcodeButton.frame.minX - 8
         statusLabel.frame = NSRect(
             x: inset,
             y: 18,
-            width: width - inset * 2 - 68 - 88 - 24,
+            width: max(80, statusRight - inset),
             height: 18
         )
     }
 
     // MARK: - 状态
 
-    func show(text: String, status: String, busy: Bool, copyEnabled: Bool) {
+    private var barcodes: [String] = []
+
+    func show(text: String, status: String, busy: Bool, copyEnabled: Bool, barcodes: [String] = []) {
+        self.barcodes = barcodes
+        barcodeButton.isHidden = barcodes.isEmpty
+        barcodeButton.titleText = "复制二维码"
         textView.string = text
         statusLabel.stringValue = status
         copyButton.isEnabled = copyEnabled
@@ -321,5 +340,17 @@ private final class OCRPanelContentView: NSView {
     // MARK: - 动作
 
     @objc private func copyTapped() { onCopy?() }
+
+    @objc private func copyBarcodeTapped() {
+        guard !barcodes.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(barcodes.joined(separator: "\n"), forType: .string)
+        barcodeButton.titleText = "已复制 ✓"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
+            self?.barcodeButton.titleText = "复制二维码"
+        }
+    }
+
     @objc private func closeTapped() { onClose?() }
 }

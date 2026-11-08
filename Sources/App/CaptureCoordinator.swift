@@ -18,6 +18,8 @@ final class CaptureCoordinator {
     private var clipboardEditor: AnnotationEditorController?
     private var previousFrontmostApp: NSRunningApplication?
     private var pendingDelay: DispatchWorkItem?
+    private var windowCandidates: [WindowCandidate] = []
+    private var scrollController: ScrollingCaptureController?
 
     private enum LastSelectionStore {
         static let displayIDKey = "lastSelection.displayID"
@@ -140,8 +142,55 @@ final class CaptureCoordinator {
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, seconds), execute: work)
     }
 
-    /// 窗口截图：抓取当前前台窗口（自动排除 PinShot 自己）。
+    /// 窗口截图：弹出窗口选择菜单，选中后抓取整个窗口。
     func beginWindowCapture(mode: Mode = .pin) {
+        guard !isCapturing else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let candidates = await WindowCapturer.listWindows()
+            guard !candidates.isEmpty else {
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = "没有可截图的窗口"
+                alert.informativeText = "请先打开一个普通应用窗口（PinShot 自己的窗口会被排除）。"
+                alert.addButton(withTitle: "好")
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+                return
+            }
+            self.windowCandidates = candidates
+            let menu = NSMenu()
+            let header = NSMenuItem(title: "选择要截图的窗口", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            menu.addItem(header)
+            for (index, candidate) in candidates.enumerated() {
+                let rawTitle = candidate.title.count > 64
+                    ? String(candidate.title.prefix(63)) + "…"
+                    : candidate.title
+                let item = NSMenuItem(
+                    title: "\(candidate.appName) — \(rawTitle)",
+                    action: #selector(CaptureCoordinator.windowCandidateSelected(_:)),
+                    keyEquivalent: ""
+                )
+                item.tag = index
+                item.target = self
+                if let icon = candidate.icon {
+                    item.image = icon
+                }
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem(title: "取消", action: nil, keyEquivalent: ""))
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        }
+    }
+
+    @objc private func windowCandidateSelected(_ sender: NSMenuItem) {
+        guard sender.tag >= 0, sender.tag < windowCandidates.count else { return }
+        captureWindow(windowCandidates[sender.tag])
+    }
+
+    private func captureWindow(_ candidate: WindowCandidate) {
         guard !isCapturing else { return }
         isCapturing = true
         previousFrontmostApp = NSWorkspace.shared.frontmostApplication
@@ -151,7 +200,7 @@ final class CaptureCoordinator {
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
             do {
-                let captured = try await WindowCapturer.captureFrontmostWindow()
+                let captured = try await WindowCapturer.capture(candidate)
                 let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
                     ?? NSScreen.main
                 let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
@@ -172,7 +221,7 @@ final class CaptureCoordinator {
                     width: displaySize.width,
                     height: displaySize.height
                 )
-                self.presentAnnotationEditor(image: image, screenRect: frame, mode: mode)
+                self.presentAnnotationEditor(image: image, screenRect: frame, mode: .pin)
             } catch {
                 self.finishCapture()
                 let alert = NSAlert()
@@ -184,6 +233,60 @@ final class CaptureCoordinator {
                 alert.runModal()
             }
         }
+    }
+
+    /// 滚动截图：框选区域后自动/手动滚动并拼接成长图。
+    func beginScrollCapture() {
+        guard !isCapturing else { return }
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        PinManager.shared.hideAllForCapture()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+            let result = await ScreenCapturer().captureAllScreens()
+            switch result {
+            case .success(let snapshots):
+                self.presentScrollSelection(with: snapshots)
+            case .failure(let error):
+                self.abortCapture()
+                self.handleCaptureFailure(error, mode: .pin)
+            }
+        }
+    }
+
+    private func presentScrollSelection(with snapshots: [ScreenSnapshot]) {
+        let controller = SelectionOverlayController(snapshots: snapshots) { [weak self] outcome in
+            guard let self else { return }
+            self.overlay = nil
+            switch outcome {
+            case .cancelled:
+                self.finishCapture()
+            case .selected(let snapshot, let rect):
+                let globalRect = CaptureGeometry.globalRect(forSelection: rect, in: snapshot)
+                let scroller = ScrollingCaptureController(
+                    snapshot: snapshot,
+                    selection: rect,
+                    mode: .pin,
+                    onComplete: { [weak self] image, frame in
+                        guard let self else { return }
+                        self.scrollController = nil
+                        self.presentAnnotationEditor(image: image, screenRect: frame, mode: .pin)
+                    },
+                    onCancel: { [weak self] in
+                        guard let self else { return }
+                        self.scrollController = nil
+                        self.finishCapture()
+                    }
+                )
+                self.scrollController = scroller
+                scroller.start()
+                NSLog("[PinShot] scroll capture started rect=\(globalRect)")
+            }
+        }
+        overlay = controller
+        controller.present()
     }
 
     /// 重复上一次的框选区域。

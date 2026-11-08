@@ -235,7 +235,7 @@ final class AnnotationEditorController: NSWindowController {
 
     func selectTool(_ tool: AnnotationStroke.Tool) {
         let previous = canvasView.tool
-        // 记录进入取色 / 测量前使用的工具，退出瞬时工具时恢复
+        // 记录进入取色 / 测量 / 放大镜前使用的工具，退出瞬时工具时恢复
         if previous != tool, !previous.isTransient {
             toolBeforeTransient = previous
         }
@@ -244,7 +244,7 @@ final class AnnotationEditorController: NSWindowController {
         workbenchView.updateHint(for: tool)
     }
 
-    /// 取色 / 测量等瞬时工具按 Esc 时优先退出到上一个工具；返回是否消费了 Esc。
+    /// 取色 / 测量 / 放大镜等瞬时工具按 Esc 时优先退出到上一个工具；返回是否消费了 Esc。
     @discardableResult
     private func exitTransientToolIfNeeded() -> Bool {
         guard canvasView.tool.isTransient else { return false }
@@ -272,6 +272,42 @@ final class AnnotationEditorController: NSWindowController {
         refreshToolbarState()
     }
 
+    /// 应用背景板设置：重排预览尺寸（必要时等比缩小画布避免裁切）并刷新弹窗选中态。
+    func setBackdrop(_ settings: AnnotationBackdrop) {
+        canvasView.endTextEditing()
+        canvasView.backdrop = settings
+        applyBackdropLayout()
+        refreshToolbarState()
+    }
+
+    /// 背景板开关 / 内边距变化后重新计算画布显示尺寸。
+    private func applyBackdropLayout() {
+        let base = metrics.displaySize
+        let paddingRatio = canvasView.backdrop.isEnabled ? canvasView.backdrop.padding.ratio : 0
+        var display = base
+        if paddingRatio > 0 {
+            // 预留 24pt 给卡片阴影 / 描边，避免贴边被窗口裁掉
+            let available = CGSize(
+                width: max(120, metrics.windowSize.width - AnnotationLayout.horizontalInset * 2 - 24),
+                height: max(120, metrics.windowSize.height - AnnotationLayout.fixedVertical - 24)
+            )
+            let scale = min(
+                1,
+                available.width / (base.width * (1 + paddingRatio * 2)),
+                available.height / (base.height * (1 + paddingRatio * 2))
+            )
+            display = CGSize(
+                width: max(80, (base.width * scale).rounded()),
+                height: max(80, (base.height * scale).rounded())
+            )
+        }
+        canvasView.setDisplaySize(display)
+        workbenchView.needsLayout = true
+        workbenchView.layoutSubtreeIfNeeded()
+        workbenchView.needsDisplay = true
+        canvasView.needsDisplay = true
+    }
+
     private func refreshToolbarState() {
         toolbarView.setSelectedTool(canvasView.tool)
         toolbarView.setSelectedColor(canvasView.strokeColor)
@@ -280,7 +316,8 @@ final class AnnotationEditorController: NSWindowController {
         moreToolsController?.updateSelection(
             tool: canvasView.tool,
             blurStyle: canvasView.blurStyle,
-            spotlightStyle: canvasView.spotlightStyle
+            spotlightStyle: canvasView.spotlightStyle,
+            backdrop: canvasView.backdrop
         )
     }
 
@@ -321,6 +358,7 @@ final class AnnotationEditorController: NSWindowController {
         case "g": selectTool(.spotlight); return true
         case "i": selectTool(.eyedropper); return true
         case "m": selectTool(.ruler); return true
+        case "z": selectTool(.loupe); return true
         default: return false
         }
     }
@@ -465,7 +503,8 @@ final class AnnotationEditorController: NSWindowController {
         moreToolsController?.updateSelection(
             tool: canvasView.tool,
             blurStyle: canvasView.blurStyle,
-            spotlightStyle: canvasView.spotlightStyle
+            spotlightStyle: canvasView.spotlightStyle,
+            backdrop: canvasView.backdrop
         )
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
     }
@@ -493,6 +532,10 @@ final class AnnotationEditorController: NSWindowController {
             self.selectSpotlightStyle(style)
             self.focusWorkbench()
         }
+        content.onBackdropChanged = { [weak self] settings in
+            guard let self else { return }
+            self.setBackdrop(settings)
+        }
         popover.contentViewController = content
         // 先完成 loadView，preferredContentSize 才是有效值；否则弹窗会以 0 尺寸显示
         content.loadViewIfNeeded()
@@ -509,9 +552,17 @@ final class AnnotationEditorController: NSWindowController {
         selectTool(.pen)
         selectColor(AnnotationPalette.defaultColor)
         selectLineWidth(AnnotationPalette.defaultLineWidth)
-        canvasView.setDebugStrokes(AnnotationEditorController.makeSampleStrokes(displaySize: metrics.displaySize))
-        // 预置一条测量结果，让截图能同时验证测量覆层（测量不进入导出）
-        let displaySize = metrics.displaySize
+        // 背景板样例：纸白 + 中等内边距 + 圆角 / 阴影，供 `--render-ui` 目检
+        setBackdrop(AnnotationBackdrop(
+            isEnabled: true,
+            preset: .paper,
+            padding: .medium,
+            rounded: true,
+            shadow: true
+        ))
+        // 背景板会缩小画布显示区域，示例笔画 / 测量按最终显示尺寸生成
+        let displaySize = canvasView.displaySize
+        canvasView.setDebugStrokes(AnnotationEditorController.makeSampleStrokes(displaySize: displaySize))
         canvasView.debugSetRulerMeasurement(
             start: CGPoint(x: displaySize.width * 0.18, y: displaySize.height * 0.40),
             end: CGPoint(x: displaySize.width * 0.62, y: displaySize.height * 0.68)
@@ -678,7 +729,7 @@ final class AnnotationPanel: NSPanel {
 @MainActor
 final class AnnotationWorkbenchView: NSView {
     /// 默认底部提示：压缩后的全量快捷键说明（宽度不够时尾部省略）
-    private static let defaultHint = "P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮 · T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量 · ⌘Z 撤销 · Enter 完成"
+    private static let defaultHint = "P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮 · T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量 · Z 放大镜 · ⌘Z 撤销 · ⏎ 完成"
 
     weak var controller: AnnotationEditorController?
 
@@ -697,7 +748,7 @@ final class AnnotationWorkbenchView: NSView {
         self.hintLabel = NSTextField(labelWithString: Self.defaultHint)
         super.init(frame: frameRect)
 
-        hintLabel.font = PSTheme.text(11)
+        hintLabel.font = PSTheme.text(10.5)
         hintLabel.textColor = AnnotationEditorColors.hint
         hintLabel.alignment = .center
         hintLabel.lineBreakMode = .byTruncatingTail
@@ -744,19 +795,61 @@ final class AnnotationWorkbenchView: NSView {
         path.lineWidth = 1
         path.stroke()
 
-        // 画布下方的柔和阴影（画布子视图会盖住填充，只露出四周光晕）
         guard canvas.bounds.width > 1, canvas.bounds.height > 1 else { return }
+        if canvas.backdrop.isEnabled {
+            drawBackdropPreview(in: canvas.frame)
+        } else {
+            // 画布下方的柔和阴影（画布子视图会盖住填充，只露出四周光晕）
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
+            shadow.shadowBlurRadius = 18
+            shadow.shadowOffset = NSSize(width: 0, height: -4)
+            shadow.set()
+            NSColor(white: 0.05, alpha: 1).setFill()
+            NSBezierPath(
+                roundedRect: canvas.frame,
+                xRadius: 8,
+                yRadius: 8
+            ).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+    }
+
+    /// 背景板预览：图片外围绘制预设底色卡片 + 圆角 + 柔和阴影（导出时按像素比例合成同样的效果）。
+    private func drawBackdropPreview(in imageFrame: NSRect) {
+        let padding = canvas.backdropPaddingDisplay
+        guard padding > 0 else { return }
+        let settings = canvas.backdrop
+        let cardRect = imageFrame.insetBy(dx: -padding, dy: -padding)
+        let cardRadius = canvas.backdropCardCornerRadius
+        let cardPath = NSBezierPath(
+            roundedRect: cardRect,
+            xRadius: cardRadius,
+            yRadius: cardRadius
+        )
+        settings.preset.color.setFill()
+        cardPath.fill()
+        let borderColor = settings.preset.isLight
+            ? NSColor.black.withAlphaComponent(0.08)
+            : NSColor.white.withAlphaComponent(0.10)
+        borderColor.setStroke()
+        cardPath.lineWidth = 1
+        cardPath.stroke()
+
+        guard settings.shadow else { return }
+        // 用与卡片相同的底色填充图片圆角矩形：填充本身不可见，只留下柔和阴影
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.55)
-        shadow.shadowBlurRadius = 18
-        shadow.shadowOffset = NSSize(width: 0, height: -4)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = max(8, padding * 0.5)
+        shadow.shadowOffset = NSSize(width: 0, height: -max(2, padding * 0.10))
         shadow.set()
-        NSColor(white: 0.05, alpha: 1).setFill()
+        settings.preset.color.setFill()
         NSBezierPath(
-            roundedRect: canvas.frame,
-            xRadius: 8,
-            yRadius: 8
+            roundedRect: imageFrame,
+            xRadius: canvas.imageCornerRadius,
+            yRadius: canvas.imageCornerRadius
         ).fill()
         NSGraphicsContext.restoreGraphicsState()
     }
@@ -785,9 +878,17 @@ final class AnnotationWorkbenchView: NSView {
             width: ocrWidth,
             height: 20
         )
+        // 背景板开启时按「图片 + 内边距」的卡片整体居中，关闭时卡片即图片
+        let padding = canvas.backdropPaddingDisplay
+        let regionBottom = AnnotationLayout.bottomInset + AnnotationLayout.hintHeight + AnnotationLayout.hintGap
+        let regionTop = height - AnnotationLayout.topInset - AnnotationLayout.toolbarHeight - AnnotationLayout.toolbarToCanvasGap
+        let cardWidth = canvas.displaySize.width + padding * 2
+        let cardHeight = canvas.displaySize.height + padding * 2
+        let cardX = ((width - cardWidth) / 2).rounded()
+        let cardY = (regionBottom + max(0, (regionTop - regionBottom - cardHeight) / 2)).rounded()
         canvas.frame = NSRect(
-            x: ((width - canvas.displaySize.width) / 2).rounded(),
-            y: AnnotationLayout.bottomInset + AnnotationLayout.hintHeight + AnnotationLayout.hintGap,
+            x: cardX + padding,
+            y: cardY + padding,
             width: canvas.displaySize.width,
             height: canvas.displaySize.height
         )
@@ -817,6 +918,8 @@ final class AnnotationWorkbenchView: NSView {
             text = "点击画布任意位置取色，复制 #RRGGBB 到剪贴板 · Esc 退出"
         case .ruler:
             text = "拖拽测量宽 × 高与斜线长度（截图原生像素）· 切换工具清除"
+        case .loupe:
+            text = "移动鼠标查看像素放大与对白/对黑对比度，点击复制 #RRGGBB · Esc 退出"
         default:
             text = Self.defaultHint
         }
@@ -930,11 +1033,11 @@ final class AnnotationToolbarView: NSVisualEffectView {
         // 「更多工具」：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量（NSPopover）
         moreToolsButton = makeSymbolButton(
             symbol: "ellipsis.circle",
-            accessibilityLabel: "更多工具：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量",
+            accessibilityLabel: "更多工具：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量 / 放大镜",
             target: target,
             action: #selector(AnnotationEditorController.moreToolsButtonTapped(_:))
         )
-        moreToolsButton.toolTip = "更多工具（T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量）"
+        moreToolsButton.toolTip = "更多工具（T 文字 · N 序号 · B 模糊 · G 聚光灯 · I 取色 · M 测量 · Z 放大镜）"
         moreToolsButton.setAccessibilityLabel("更多工具")
         addSubview(moreToolsButton)
 
@@ -1431,26 +1534,36 @@ final class AnnotationWidthButton: NSButton {
 
 // MARK: - 「更多工具」弹窗
 
-/// 「更多工具」NSPopover 的内容：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量 六行，
-/// 下方再给出模糊样式与聚光灯样式的切换。
+/// 「更多工具」NSPopover 的内容：文字 / 序号 / 模糊 / 聚光灯 / 取色 / 测量 / 放大镜 七行，
+/// 下方再给出模糊样式、聚光灯样式与背景板设置。
 @MainActor
 final class AnnotationMoreToolsViewController: NSViewController {
     /// 弹窗固定尺寸（与 loadView 里的容器一致）
-    static let preferredSize = NSSize(width: 212, height: 320)
+    static let preferredSize = NSSize(width: 236, height: 484)
 
     var onSelectTool: ((AnnotationStroke.Tool) -> Void)?
     var onBlurStyleChanged: ((AnnotationStroke.BlurStyle) -> Void)?
     var onSpotlightStyleChanged: ((AnnotationStroke.SpotlightStyle) -> Void)?
+    var onBackdropChanged: ((AnnotationBackdrop) -> Void)?
 
     private static let blurStyles: [AnnotationStroke.BlurStyle] = [.pixelate, .gaussian]
     private static let spotlightStyles: [AnnotationStroke.SpotlightStyle] = [.dark, .light]
 
+    private var backdrop = AnnotationBackdrop()
+
     private var rows: [AnnotationPopoverToolRowButton] = []
     private var blurStyleButtons: [AnnotationStyleOptionButton] = []
     private var spotlightStyleButtons: [AnnotationStyleOptionButton] = []
+    private var backdropColorButtons: [AnnotationColorSwatchButton] = []
+    private var backdropPaddingButtons: [AnnotationStyleOptionButton] = []
+    private var roundedButton: AnnotationStyleOptionButton!
+    private var shadowButton: AnnotationStyleOptionButton!
     private let blurStyleLabel = NSTextField(labelWithString: "模糊样式")
     private let spotlightStyleLabel = NSTextField(labelWithString: "聚光灯")
+    private let backdropLabel = NSTextField(labelWithString: "背景板")
     private let separator = NSView()
+    private let backdropSeparator = NSView()
+    private var backdropSwitch: PinSwitch!
 
     override func loadView() {
         let size = Self.preferredSize
@@ -1458,7 +1571,7 @@ final class AnnotationMoreToolsViewController: NSViewController {
         view = container
         preferredContentSize = size
 
-        // 6 行工具：自上而下排列（顶部留 8、行高 30、行距 2）
+        // 7 行工具：自上而下排列（顶部留 8、行高 30、行距 2）
         var rowY = size.height - 8 - 30
         for tool in AnnotationStroke.Tool.extendedTools {
             let row = AnnotationPopoverToolRowButton(
@@ -1472,17 +1585,16 @@ final class AnnotationMoreToolsViewController: NSViewController {
             rowY -= 32
         }
 
-        separator.wantsLayer = true
-        separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
-        separator.frame = NSRect(x: 10, y: 114, width: size.width - 20, height: 1)
+        configureSeparator(separator)
+        separator.frame = NSRect(x: 10, y: 246, width: size.width - 20, height: 1)
         container.addSubview(separator)
 
         configureStyleLabel(blurStyleLabel)
-        blurStyleLabel.frame = NSRect(x: 10, y: 92, width: 120, height: 14)
+        blurStyleLabel.frame = NSRect(x: 10, y: 224, width: 120, height: 14)
         container.addSubview(blurStyleLabel)
 
         configureStyleLabel(spotlightStyleLabel)
-        spotlightStyleLabel.frame = NSRect(x: 10, y: 38, width: 120, height: 14)
+        spotlightStyleLabel.frame = NSRect(x: 10, y: 168, width: 120, height: 14)
         container.addSubview(spotlightStyleLabel)
 
         let gap: CGFloat = 6
@@ -1496,7 +1608,7 @@ final class AnnotationMoreToolsViewController: NSViewController {
             )
             button.frame = NSRect(
                 x: 8 + CGFloat(index) * (optionWidth + gap),
-                y: 62,
+                y: 194,
                 width: optionWidth,
                 height: 24
             )
@@ -1512,13 +1624,92 @@ final class AnnotationMoreToolsViewController: NSViewController {
             )
             button.frame = NSRect(
                 x: 8 + CGFloat(index) * (optionWidth + gap),
-                y: 8,
+                y: 138,
                 width: optionWidth,
                 height: 24
             )
             container.addSubview(button)
             spotlightStyleButtons.append(button)
         }
+
+        // 背景板：开关 + 4 底色 + 3 档内边距 + 圆角 / 阴影
+        configureSeparator(backdropSeparator)
+        backdropSeparator.frame = NSRect(x: 10, y: 126, width: size.width - 20, height: 1)
+        container.addSubview(backdropSeparator)
+
+        configureStyleLabel(backdropLabel)
+        backdropLabel.frame = NSRect(x: 10, y: 100, width: 120, height: 14)
+        container.addSubview(backdropLabel)
+
+        let enabledSwitch = PinSwitch(isOn: backdrop.isEnabled)
+        enabledSwitch.translatesAutoresizingMaskIntoConstraints = true
+        enabledSwitch.setLabel("背景板开关")
+        enabledSwitch.frame = NSRect(x: size.width - 10 - 38, y: 96, width: 38, height: 22)
+        enabledSwitch.target = self
+        enabledSwitch.action = #selector(backdropSwitchChanged(_:))
+        container.addSubview(enabledSwitch)
+        enabledSwitch.layout()
+        backdropSwitch = enabledSwitch
+
+        for (index, preset) in AnnotationBackdrop.Preset.allCases.enumerated() {
+            let swatch = AnnotationColorSwatchButton(
+                color: preset.color,
+                accessibilityLabel: "背景板\(preset.title) \(preset.hex)",
+                target: self,
+                action: #selector(backdropColorTapped(_:))
+            )
+            swatch.tag = preset.rawValue
+            swatch.frame = NSRect(x: 12 + CGFloat(index) * 32, y: 68, width: 22, height: 22)
+            container.addSubview(swatch)
+            backdropColorButtons.append(swatch)
+        }
+
+        let paddingWidth = (size.width - 16 - gap * 2) / 3
+        for (index, padding) in AnnotationBackdrop.Padding.allCases.enumerated() {
+            let button = AnnotationStyleOptionButton(
+                title: padding.title,
+                tag: padding.rawValue,
+                target: self,
+                action: #selector(backdropPaddingTapped(_:))
+            )
+            button.toolTip = padding.caption
+            button.setAccessibilityLabel(padding.caption)
+            button.frame = NSRect(
+                x: 8 + CGFloat(index) * (paddingWidth + gap),
+                y: 38,
+                width: paddingWidth,
+                height: 24
+            )
+            container.addSubview(button)
+            backdropPaddingButtons.append(button)
+        }
+
+        let rounded = AnnotationStyleOptionButton(
+            title: "圆角",
+            tag: 0,
+            target: self,
+            action: #selector(roundedTapped(_:))
+        )
+        rounded.toolTip = "图片与背景板圆角"
+        rounded.frame = NSRect(x: 8, y: 8, width: optionWidth, height: 24)
+        container.addSubview(rounded)
+        roundedButton = rounded
+
+        let shadow = AnnotationStyleOptionButton(
+            title: "阴影",
+            tag: 0,
+            target: self,
+            action: #selector(shadowTapped(_:))
+        )
+        shadow.toolTip = "图片柔和阴影"
+        shadow.frame = NSRect(x: 8 + optionWidth + gap, y: 8, width: optionWidth, height: 24)
+        container.addSubview(shadow)
+        shadowButton = shadow
+    }
+
+    private func configureSeparator(_ separator: NSView) {
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
     }
 
     private func configureStyleLabel(_ label: NSTextField) {
@@ -1528,12 +1719,14 @@ final class AnnotationMoreToolsViewController: NSViewController {
         label.isSelectable = false
     }
 
-    /// 同步当前工具 / 模糊样式 / 聚光灯样式的高亮状态；对应样式标签同步变橙。
+    /// 同步当前工具 / 模糊样式 / 聚光灯样式 / 背景板的高亮状态；相关标签同步变橙。
     func updateSelection(
         tool: AnnotationStroke.Tool,
         blurStyle: AnnotationStroke.BlurStyle,
-        spotlightStyle: AnnotationStroke.SpotlightStyle
+        spotlightStyle: AnnotationStroke.SpotlightStyle,
+        backdrop: AnnotationBackdrop
     ) {
+        self.backdrop = backdrop
         for row in rows {
             row.isSelected = row.tool == tool
         }
@@ -1549,6 +1742,26 @@ final class AnnotationMoreToolsViewController: NSViewController {
         spotlightStyleLabel.textColor = tool == .spotlight
             ? PSTheme.accent
             : NSColor.white.withAlphaComponent(0.45)
+
+        // 背景板
+        backdropSwitch.setOn(backdrop.isEnabled, animated: false)
+        backdropLabel.textColor = backdrop.isEnabled
+            ? PSTheme.accent
+            : NSColor.white.withAlphaComponent(0.45)
+        for button in backdropColorButtons {
+            button.isSelected = button.tag == backdrop.preset.rawValue
+        }
+        for button in backdropPaddingButtons {
+            button.isSelected = button.tag == backdrop.padding.rawValue
+        }
+        roundedButton.isSelected = backdrop.rounded
+        shadowButton.isSelected = backdrop.shadow
+        // 背景板关闭时弱化细节控件，避免误以为已生效
+        let controlsAlpha: CGFloat = backdrop.isEnabled ? 1 : 0.55
+        for view in backdropColorButtons { view.alphaValue = controlsAlpha }
+        for view in backdropPaddingButtons { view.alphaValue = controlsAlpha }
+        roundedButton.alphaValue = controlsAlpha
+        shadowButton.alphaValue = controlsAlpha
     }
 
     @objc private func rowTapped(_ sender: AnnotationPopoverToolRowButton) {
@@ -1563,6 +1776,43 @@ final class AnnotationMoreToolsViewController: NSViewController {
     @objc private func spotlightStyleButtonTapped(_ sender: AnnotationStyleOptionButton) {
         guard let style = AnnotationStroke.SpotlightStyle(rawValue: sender.tag) else { return }
         onSpotlightStyleChanged?(style)
+    }
+
+    @objc private func backdropSwitchChanged(_ sender: PinSwitch) {
+        var settings = backdrop
+        settings.isEnabled = sender.isOn
+        backdrop = settings
+        onBackdropChanged?(settings)
+    }
+
+    @objc private func backdropColorTapped(_ sender: AnnotationColorSwatchButton) {
+        guard let preset = AnnotationBackdrop.Preset(rawValue: sender.tag) else { return }
+        var settings = backdrop
+        settings.preset = preset
+        backdrop = settings
+        onBackdropChanged?(settings)
+    }
+
+    @objc private func backdropPaddingTapped(_ sender: AnnotationStyleOptionButton) {
+        guard let padding = AnnotationBackdrop.Padding(rawValue: sender.tag) else { return }
+        var settings = backdrop
+        settings.padding = padding
+        backdrop = settings
+        onBackdropChanged?(settings)
+    }
+
+    @objc private func roundedTapped(_ sender: AnnotationStyleOptionButton) {
+        var settings = backdrop
+        settings.rounded.toggle()
+        backdrop = settings
+        onBackdropChanged?(settings)
+    }
+
+    @objc private func shadowTapped(_ sender: AnnotationStyleOptionButton) {
+        var settings = backdrop
+        settings.shadow.toggle()
+        backdrop = settings
+        onBackdropChanged?(settings)
     }
 }
 

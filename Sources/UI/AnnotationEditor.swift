@@ -92,6 +92,8 @@ final class AnnotationEditorController: NSWindowController {
     private var workbenchView: AnnotationWorkbenchView!
     private var canvasView: AnnotationCanvasView!
     private var toolbarView: AnnotationToolbarView!
+    private var moreToolsPopover: NSPopover?
+    private var moreToolsController: AnnotationMoreToolsViewController?
     private var finished = false
     private var ocrRunning = false
     private var ocrResult: TextRecognitionResult?
@@ -216,6 +218,8 @@ final class AnnotationEditorController: NSWindowController {
 
     private func complete(with action: AnnotationEditorAction) {
         guard !finished else { return }
+        // 未提交的文字先落笔，再合成原生像素图
+        canvasView.endTextEditing()
         // 先把当前笔画合成成原生像素图，再关闭窗口
         let annotated = canvasView.compositeImage() ?? sourceImage
         finish(.completed(annotated, action: action))
@@ -238,14 +242,21 @@ final class AnnotationEditorController: NSWindowController {
         toolbarView.setSelectedLineWidth(width)
     }
 
+    func selectBlurStyle(_ style: AnnotationStroke.BlurStyle) {
+        canvasView.blurStyle = style
+        refreshToolbarState()
+    }
+
     private func refreshToolbarState() {
         toolbarView.setSelectedTool(canvasView.tool)
         toolbarView.setSelectedColor(canvasView.strokeColor)
         toolbarView.setSelectedLineWidth(canvasView.lineWidth)
         toolbarView.setUndoRedo(canUndo: canvasView.canUndo, canRedo: canvasView.canRedo)
+        moreToolsController?.updateSelection(tool: canvasView.tool, blurStyle: canvasView.blurStyle)
     }
 
     private func focusWorkbench() {
+        canvasView?.endTextEditing()
         window?.makeFirstResponder(workbenchView)
     }
 
@@ -273,6 +284,9 @@ final class AnnotationEditorController: NSWindowController {
         case "r": selectTool(.rectangle); return true
         case "h": selectTool(.highlighter); return true
         case "e": selectTool(.eraser); return true
+        case "t": selectTool(.text); return true
+        case "n": selectTool(.step); return true
+        case "b": selectTool(.blur); return true
         default: return false
         }
     }
@@ -404,6 +418,47 @@ final class AnnotationEditorController: NSWindowController {
         complete(with: .finish)
     }
 
+    // MARK: 「更多工具」弹窗
+
+    /// 工具栏 ▸ 更多工具按钮：弹出文字 / 序号 / 模糊
+    @objc func moreToolsButtonTapped(_ sender: NSButton) {
+        let popover = ensureMoreToolsPopover()
+        if popover.isShown {
+            popover.performClose(sender)
+            return
+        }
+        canvasView.endTextEditing()
+        moreToolsController?.updateSelection(tool: canvasView.tool, blurStyle: canvasView.blurStyle)
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+    }
+
+    private func ensureMoreToolsPopover() -> NSPopover {
+        if let moreToolsPopover { return moreToolsPopover }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        popover.appearance = NSAppearance(named: .darkAqua)
+        let content = AnnotationMoreToolsViewController()
+        content.onSelectTool = { [weak self] tool in
+            guard let self else { return }
+            self.selectTool(tool)
+            self.moreToolsPopover?.performClose(nil)
+            self.focusWorkbench()
+        }
+        content.onBlurStyleChanged = { [weak self] style in
+            guard let self else { return }
+            self.selectBlurStyle(style)
+            self.focusWorkbench()
+        }
+        popover.contentViewController = content
+        // 先完成 loadView，preferredContentSize 才是有效值；否则弹窗会以 0 尺寸显示
+        content.loadViewIfNeeded()
+        popover.contentSize = content.preferredContentSize
+        moreToolsPopover = popover
+        moreToolsController = content
+        return popover
+    }
+
     // MARK: 离屏渲染自检
 
     /// 强制铺一套示例标注（供 `--render-ui` 截图）。
@@ -513,6 +568,36 @@ final class AnnotationEditorController: NSWindowController {
                 points: [CGPoint(x: width * 0.12, y: height * 0.34), CGPoint(x: width * 0.50, y: height * 0.34)],
                 color: colors[2],
                 lineWidth: 14
+            ),
+            // 扩展工具：马赛克 / 文字 / 序号
+            // 马赛克放在右侧终端窗口与壁纸交界处（有灰条 / 色块，离屏截图里能看出块状效果）
+            AnnotationStroke(
+                tool: .blur,
+                points: [CGPoint(x: width * 0.86, y: height * 0.45), CGPoint(x: width * 0.995, y: height * 0.86)],
+                color: colors[0],
+                lineWidth: 8,
+                blurStyle: .pixelate
+            ),
+            AnnotationStroke(
+                tool: .text,
+                points: [CGPoint(x: width * 0.08, y: height * 0.16)],
+                color: colors[5],
+                lineWidth: 26,
+                text: "Shottr 标注"
+            ),
+            AnnotationStroke(
+                tool: .step,
+                points: [CGPoint(x: width * 0.66, y: height * 0.50)],
+                color: colors[1],
+                lineWidth: 8,
+                stepNumber: 1
+            ),
+            AnnotationStroke(
+                tool: .step,
+                points: [CGPoint(x: width * 0.74, y: height * 0.40)],
+                color: colors[1],
+                lineWidth: 8,
+                stepNumber: 2
             )
         ]
     }
@@ -542,7 +627,7 @@ final class AnnotationWorkbenchView: NSView {
     init(frame frameRect: NSRect, canvas: AnnotationCanvasView, toolbar: AnnotationToolbarView) {
         self.canvas = canvas
         self.toolbar = toolbar
-        self.hintLabel = NSTextField(labelWithString: "拖拽绘制 · P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮擦 · ⌘Z 撤销 · Enter 完成")
+        self.hintLabel = NSTextField(labelWithString: "P 画笔 · L 直线 · A 箭头 · R 矩形 · H 高亮 · E 橡皮擦 · T 文字 · N 序号 · B 模糊 · ⌘Z 撤销 · Enter 完成")
         super.init(frame: frameRect)
 
         hintLabel.font = PSTheme.text(11)
@@ -696,6 +781,7 @@ final class AnnotationToolbarView: NSVisualEffectView {
     private let tintView = NSView()
     private let borderView = AnnotationToolbarBorderView()
     private var toolButtons: [AnnotationToolButton] = []
+    private var moreToolsButton: NSButton!
     private var swatches: [AnnotationColorSwatchButton] = []
     private var widthButtons: [AnnotationWidthButton] = []
     private var separators: [NSView] = []
@@ -728,7 +814,7 @@ final class AnnotationToolbarView: NSVisualEffectView {
     // MARK: 构建
 
     private func buildItems(target: AnnotationEditorController) {
-        for tool in AnnotationStroke.Tool.allCases {
+        for tool in AnnotationStroke.Tool.primaryTools {
             let button = AnnotationToolButton(
                 tool: tool,
                 target: target,
@@ -737,6 +823,17 @@ final class AnnotationToolbarView: NSVisualEffectView {
             addSubview(button)
             toolButtons.append(button)
         }
+
+        // 「更多工具」：文字 / 序号 / 模糊（NSPopover）
+        moreToolsButton = makeSymbolButton(
+            symbol: "ellipsis.circle",
+            accessibilityLabel: "更多工具：文字 / 序号 / 模糊",
+            target: target,
+            action: #selector(AnnotationEditorController.moreToolsButtonTapped(_:))
+        )
+        moreToolsButton.toolTip = "更多工具（T 文字 · N 序号 · B 模糊）"
+        moreToolsButton.setAccessibilityLabel("更多工具")
+        addSubview(moreToolsButton)
 
         for (index, color) in AnnotationPalette.colors.enumerated() {
             let swatch = AnnotationColorSwatchButton(
@@ -849,6 +946,9 @@ final class AnnotationToolbarView: NSVisualEffectView {
             button.frame = NSRect(x: x, y: (height - 28) / 2, width: 28, height: 28)
             x += 28 + 2
         }
+        // 更多工具按钮（与主工具同尺寸，扩展工具选中时图标变橙）
+        moreToolsButton.frame = NSRect(x: x, y: (height - 28) / 2, width: 28, height: 28)
+        x += 28 + 2
         x += 6
         x = layoutSeparator(index: 0, at: x, height: height)
 
@@ -900,6 +1000,10 @@ final class AnnotationToolbarView: NSVisualEffectView {
         for button in toolButtons {
             button.isSelected = button.tool == tool
         }
+        // 扩展工具（文字 / 序号 / 模糊）用橙色图标提示「更多工具」里当前有选中项
+        moreToolsButton?.contentTintColor = tool.isExtended
+            ? PSTheme.accent
+            : AnnotationEditorColors.toolIcon
     }
 
     func setSelectedColor(_ color: NSColor) {
@@ -1219,5 +1323,275 @@ final class AnnotationWidthButton: NSButton {
         // 选中态用信号橙点（设计系统里橙色代表选中），未选中为 62% 白点
         (isSelected ? PSTheme.accent : NSColor.white.withAlphaComponent(0.62)).setFill()
         dot.fill()
+    }
+}
+
+// MARK: - 「更多工具」弹窗
+
+/// 「更多工具」NSPopover 的内容：文字 / 序号 / 模糊 三行 + 模糊样式切换。
+@MainActor
+final class AnnotationMoreToolsViewController: NSViewController {
+    /// 弹窗固定尺寸（与 loadView 里的容器一致）
+    static let preferredSize = NSSize(width: 212, height: 168)
+
+    var onSelectTool: ((AnnotationStroke.Tool) -> Void)?
+    var onBlurStyleChanged: ((AnnotationStroke.BlurStyle) -> Void)?
+
+    private var rows: [AnnotationPopoverToolRowButton] = []
+    private var styleButtons: [AnnotationBlurStyleOptionButton] = []
+    private let styleLabel = NSTextField(labelWithString: "模糊样式")
+    private let separator = NSView()
+
+    override func loadView() {
+        let container = NSView(frame: NSRect(origin: .zero, size: Self.preferredSize))
+        view = container
+        preferredContentSize = Self.preferredSize
+
+        var y = Self.preferredSize.height - 8 - 30
+        for tool in AnnotationStroke.Tool.extendedTools {
+            let row = AnnotationPopoverToolRowButton(
+                tool: tool,
+                target: self,
+                action: #selector(rowTapped(_:))
+            )
+            row.frame = NSRect(x: 8, y: y, width: Self.preferredSize.width - 16, height: 30)
+            container.addSubview(row)
+            rows.append(row)
+            y -= 32
+        }
+
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        separator.frame = NSRect(x: 10, y: 55, width: Self.preferredSize.width - 20, height: 1)
+        container.addSubview(separator)
+
+        styleLabel.font = PSTheme.text(11)
+        styleLabel.textColor = NSColor.white.withAlphaComponent(0.45)
+        styleLabel.frame = NSRect(x: 10, y: 37, width: 120, height: 14)
+        container.addSubview(styleLabel)
+
+        let gap: CGFloat = 6
+        let optionWidth = (Self.preferredSize.width - 16 - gap) / 2
+        for (index, style) in [AnnotationStroke.BlurStyle.pixelate, .gaussian].enumerated() {
+            let button = AnnotationBlurStyleOptionButton(
+                style: style,
+                target: self,
+                action: #selector(styleButtonTapped(_:))
+            )
+            button.frame = NSRect(
+                x: 8 + CGFloat(index) * (optionWidth + gap),
+                y: 8,
+                width: optionWidth,
+                height: 24
+            )
+            container.addSubview(button)
+            styleButtons.append(button)
+        }
+    }
+
+    /// 同步当前工具 / 模糊样式的高亮状态
+    func updateSelection(tool: AnnotationStroke.Tool, blurStyle: AnnotationStroke.BlurStyle) {
+        for row in rows {
+            row.isSelected = row.tool == tool
+        }
+        for button in styleButtons {
+            button.isSelected = button.style == blurStyle
+        }
+    }
+
+    @objc private func rowTapped(_ sender: AnnotationPopoverToolRowButton) {
+        onSelectTool?(sender.tool)
+    }
+
+    @objc private func styleButtonTapped(_ sender: AnnotationBlurStyleOptionButton) {
+        onBlurStyleChanged?(sender.style)
+    }
+}
+
+/// 「模糊样式」选项：马赛克 / 高斯模糊，选中态橙色。
+@MainActor
+final class AnnotationBlurStyleOptionButton: NSButton {
+    let style: AnnotationStroke.BlurStyle
+
+    private var isHovering = false
+    private var trackingArea: NSTrackingArea?
+
+    var isSelected = false {
+        didSet {
+            updateTitle()
+            needsDisplay = true
+        }
+    }
+
+    init(style: AnnotationStroke.BlurStyle, target: AnyObject, action: Selector) {
+        self.style = style
+        super.init(frame: .zero)
+        isBordered = false
+        bezelStyle = .regularSquare
+        focusRingType = .none
+        setButtonType(.momentaryChange)
+        wantsLayer = true
+        title = style.title
+        toolTip = style.title
+        setAccessibilityLabel(style.title)
+        self.target = target
+        self.action = action
+        updateTitle()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { false }
+
+    private func updateTitle() {
+        attributedTitle = NSAttributedString(
+            string: style.title,
+            attributes: [
+                .font: PSTheme.text(11, weight: .medium),
+                .foregroundColor: isSelected ? PSTheme.accent : NSColor.white.withAlphaComponent(0.62)
+            ]
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rounded = NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6)
+        if isSelected {
+            PSTheme.accentSoft.setFill()
+            rounded.fill()
+        } else if isHovering {
+            NSColor.white.withAlphaComponent(0.08).setFill()
+            rounded.fill()
+        }
+        NSColor.white.withAlphaComponent(isSelected ? 0.16 : 0.10).setStroke()
+        rounded.lineWidth = 1
+        rounded.stroke()
+        super.draw(dirtyRect)
+    }
+}
+
+/// 「更多工具」弹窗里的一行：图标 + 名称 + 快捷键，选中时橙色浅底。
+@MainActor
+final class AnnotationPopoverToolRowButton: NSButton {
+    let tool: AnnotationStroke.Tool
+
+    private let shortcutLabel = NSTextField(labelWithString: "")
+    private var isHovering = false
+    private var trackingArea: NSTrackingArea?
+
+    var isSelected = false {
+        didSet { needsDisplay = true }
+    }
+
+    init(tool: AnnotationStroke.Tool, target: AnyObject, action: Selector) {
+        self.tool = tool
+        super.init(frame: .zero)
+        isBordered = false
+        bezelStyle = .regularSquare
+        focusRingType = .none
+        setButtonType(.momentaryChange)
+        wantsLayer = true
+        imagePosition = .imageLeading
+        imageScaling = .scaleProportionallyDown
+        contentTintColor = NSColor.white.withAlphaComponent(0.82)
+
+        if let image = NSImage(systemSymbolName: tool.symbolName, accessibilityDescription: tool.title) {
+            let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            self.image = image.withSymbolConfiguration(configuration) ?? image
+            self.image?.isTemplate = true
+        }
+        attributedTitle = NSAttributedString(
+            string: "   " + tool.title,
+            attributes: [
+                .font: PSTheme.text(12, weight: .medium),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.9)
+            ]
+        )
+        toolTip = "\(tool.title)（\(tool.shortcut)）"
+        setAccessibilityLabel(tool.title)
+
+        shortcutLabel.stringValue = tool.shortcut
+        shortcutLabel.font = PSTheme.mono(10)
+        shortcutLabel.textColor = NSColor.white.withAlphaComponent(0.42)
+        shortcutLabel.alignment = .right
+        shortcutLabel.isEditable = false
+        shortcutLabel.isSelectable = false
+        addSubview(shortcutLabel)
+
+        self.target = target
+        self.action = action
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var acceptsFirstResponder: Bool { false }
+
+    override func layout() {
+        super.layout()
+        shortcutLabel.frame = NSRect(x: bounds.width - 34, y: (bounds.height - 14) / 2, width: 24, height: 14)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isSelected {
+            PSTheme.accentSoft.setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 6, yRadius: 6).fill()
+        } else if isHovering {
+            NSColor.white.withAlphaComponent(0.09).setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 1), xRadius: 6, yRadius: 6).fill()
+        }
+        super.draw(dirtyRect)
     }
 }

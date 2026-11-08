@@ -33,6 +33,9 @@ final class PinManager {
         AutoHideManager.shared.register(pin)
         pin.show()
         NSLog("[PinShot] pin added frame=\(frame) placement=\(resolvedPlacement.rawValue) total=\(pins.count)")
+        if resolvedPlacement == .desktop {
+            ToastPresenter.shared.show("贴图已挂在桌面 · 菜单栏「全部浮到顶层」可置顶查看")
+        }
         if allForcedHidden {
             allForcedHidden = false
             for other in pins where other !== pin {

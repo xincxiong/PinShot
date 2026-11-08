@@ -40,7 +40,7 @@
       <div class="hero-copy">
         <p class="meta">macOS 14+ · Windows 10/11 · 开源 · MIT</p>
         <h1 id="hero-title">截图之后，<br><span class="outline">别让它消失。</span></h1>
-        <p class="lede">PinShot 把框选截图变成一块随手可用的挂件：可以标注、缩放，浮在窗口之上，或像便签一样挂在桌面。鼠标移开自动淡出，扫回原处立刻恢复。</p>
+        <p class="lede">PinShot 把框选截图变成一块随手可用的挂件：可以标注、识别文字、缩放，浮在窗口之上，或像便签一样挂在桌面。鼠标移开自动淡出，扫回原处立刻恢复。</p>
         <div class="hero-actions">
           <a class="btn-primary" href="https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg">下载 1.0.0</a>
           <a class="text-link" href="https://github.com/xincxiong/PinShot" rel="noopener">在 GitHub 查看源码 <span aria-hidden="true">↗</span></a>
@@ -93,7 +93,7 @@
       </div>
       <div class="intro-body">
         <p>需要在写代码时参考的文档，就浮在窗口最上层；不需要一直盯着看的参考图，就挂在桌面，像一张便签。</p>
-        <p>每个挂件都能单独切换，设置里还能选择新截图的默认放置方式。挂在桌面时自动隐藏暂停，移开窗口就能看到。</p>
+        <p>每个挂件都能单独切换，设置里还能选择新截图的默认放置方式。挂在桌面时自动隐藏暂停，移开窗口就能看到。截图入口还包括窗口、全屏、延时与重复上次区域。</p>
       </div>
     </div>
 
@@ -121,8 +121,8 @@
       <div class="annot-copy">
         <p class="section-label light">标注</p>
         <h2>标注留在<br>截图里。</h2>
-        <p>框选完成就直接进入标注编辑器，不用打开另一个 App。画笔、直线、箭头、矩形、高亮、橡皮擦，六种颜色，三档粗细，撤销重做都在手边。</p>
-        <p>按 <kbd>Enter</kbd> 完成并贴图；也可以 <kbd>⌘C</kbd> 复制，或 <kbd>⌘S</kbd> 存成 PNG。标注以原生像素合成，Retina 下依然清晰。</p>
+        <p>框选完成就直接进入标注编辑器，不用打开另一个 App。画笔、直线、箭头、矩形、高亮、橡皮擦之外，还有文字、序号、模糊/马赛克、聚光灯、取色与像素测量；六种颜色、三档粗细、撤销重做都在手边。</p>
+        <p>按 <kbd>Enter</kbd> 完成并贴图；也可以 <kbd>⌘C</kbd> 复制，或 <kbd>⌘S</kbd> 存成 PNG。标注以原生像素合成，Retina 下依然清晰。打开编辑器时会自动离线识别截图文字，<kbd>⌘T</kbd> 打开结果面板直接复制。</p>
         <ul class="tool-list" aria-label="标注工具">
           <li><kbd>P</kbd> 画笔</li>
           <li><kbd>L</kbd> 直线</li>
@@ -130,6 +130,12 @@
           <li><kbd>R</kbd> 矩形</li>
           <li><kbd>H</kbd> 高亮</li>
           <li><kbd>E</kbd> 橡皮擦</li>
+          <li><kbd>T</kbd> 文字</li>
+          <li><kbd>N</kbd> 序号</li>
+          <li><kbd>B</kbd> 模糊</li>
+          <li><kbd>G</kbd> 聚光灯</li>
+          <li><kbd>I</kbd> 取色</li>
+          <li><kbd>M</kbd> 测量</li>
         </ul>
       </div>
     </div>

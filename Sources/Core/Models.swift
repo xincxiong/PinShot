@@ -51,7 +51,7 @@ enum PinPlacement: String, Codable {
 enum PinShotConstants {
     static let appName = "PinShot"
     static let bundleIdentifier = "com.kuxin.pinshot"
-    static let version = "1.0.0"
+    static let version = "1.1.0"
 
     /// 贴图最小尺寸（pt）
     static let minPinSize = CGSize(width: 40, height: 40)

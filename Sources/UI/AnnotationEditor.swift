@@ -683,7 +683,7 @@ final class AnnotationEditorController: NSWindowController {
                 points: [CGPoint(x: width * 0.08, y: height * 0.16)],
                 color: colors[5],
                 lineWidth: 26,
-                text: "Shottr 标注"
+                text: "PinShot 标注"
             ),
             AnnotationStroke(
                 tool: .step,

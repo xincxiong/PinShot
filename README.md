@@ -74,9 +74,9 @@ PinShot 有一套自己的视觉语言（**Capture instrument**）：暖石墨�
 ## 安装
 
 直接下载（macOS 14+ / Apple Silicon）：
-[DMG](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.dmg) ·
-[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0/PinShot-1.0.0-macOS-arm64.zip) ·
-[版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.0.0)
+[DMG](https://github.com/xincxiong/PinShot/releases/download/v1.1.0/PinShot-1.1.0-macOS-arm64.dmg) ·
+[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.1.0/PinShot-1.1.0-macOS-arm64.zip) ·
+[版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.1.0)
 
 Windows 10/11 x64（Beta）：
 [ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0-windows/PinShot-1.0.0-windows-x64.zip) ·

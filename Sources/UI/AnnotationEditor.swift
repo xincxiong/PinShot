@@ -384,7 +384,11 @@ final class AnnotationEditorController: NSWindowController {
             complete(with: .copy)
             return true
         case "s":
-            complete(with: .save)
+            if event.modifierFlags.contains(.shift) {
+                shareCurrentImage(from: workbenchView)
+            } else {
+                complete(with: .save)
+            }
             return true
         case "w":
             cancel()
@@ -395,6 +399,12 @@ final class AnnotationEditorController: NSWindowController {
         default:
             return false
         }
+    }
+
+    /// 分享当前合成图（含标注与背景板）。
+    func shareCurrentImage(from view: NSView) {
+        let image = canvasView.compositeImage() ?? sourceImage
+        ShareService.share(pinnedImage: image, from: view, preferredEdge: .maxY)
     }
 
     // MARK: OCR
@@ -737,6 +747,7 @@ final class AnnotationWorkbenchView: NSView {
     private let toolbar: AnnotationToolbarView
     private let hintLabel: NSTextField
     private let ocrButton = NSButton()
+    private let shareButton = NSButton()
 
     /// 当前工具 / 临时提示的失效令牌：避免旧 toast 的延时恢复覆盖新提示
     private var currentTool: AnnotationStroke.Tool = .pen
@@ -768,10 +779,25 @@ final class AnnotationWorkbenchView: NSView {
         ocrButton.toolTip = "识别截图中的文字（⌘T）"
         ocrButton.setAccessibilityLabel("识别截图中的文字")
 
+        shareButton.isBordered = false
+        shareButton.bezelStyle = .regularSquare
+        shareButton.focusRingType = .none
+        if let image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "分享截图") {
+            let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            shareButton.image = image.withSymbolConfiguration(configuration) ?? image
+            shareButton.image?.isTemplate = true
+        }
+        shareButton.contentTintColor = PSTheme.accent
+        shareButton.target = self
+        shareButton.action = #selector(shareTapped)
+        shareButton.toolTip = "分享截图（⇧⌘S）"
+        shareButton.setAccessibilityLabel("分享截图")
+
         addSubview(toolbar)
         addSubview(canvas)
         addSubview(hintLabel)
         addSubview(ocrButton)
+        addSubview(shareButton)
     }
 
     required init?(coder: NSCoder) {
@@ -866,14 +892,21 @@ final class AnnotationWorkbenchView: NSView {
             height: AnnotationLayout.toolbarHeight
         )
         let ocrWidth: CGFloat = 122
+        let shareWidth: CGFloat = 24
         hintLabel.frame = NSRect(
             x: AnnotationLayout.horizontalInset,
             y: AnnotationLayout.bottomInset,
-            width: max(80, width - AnnotationLayout.horizontalInset * 2 - ocrWidth - 12),
+            width: max(80, width - AnnotationLayout.horizontalInset * 2 - ocrWidth - shareWidth - 20),
             height: AnnotationLayout.hintHeight
         )
+        shareButton.frame = NSRect(
+            x: width - AnnotationLayout.horizontalInset - shareWidth,
+            y: AnnotationLayout.bottomInset - 2,
+            width: shareWidth,
+            height: 20
+        )
         ocrButton.frame = NSRect(
-            x: width - AnnotationLayout.horizontalInset - ocrWidth,
+            x: shareButton.frame.minX - 8 - ocrWidth,
             y: AnnotationLayout.bottomInset - 2,
             width: ocrWidth,
             height: 20
@@ -902,6 +935,10 @@ final class AnnotationWorkbenchView: NSView {
 
     @objc private func ocrTapped() {
         controller?.ocrButtonTapped()
+    }
+
+    @objc private func shareTapped() {
+        controller?.shareCurrentImage(from: self)
     }
 
     // MARK: 底部提示

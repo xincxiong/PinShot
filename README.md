@@ -74,9 +74,9 @@ PinShot 有一套自己的视觉语言（**Capture instrument**）：暖石墨�
 ## 安装
 
 直接下载（macOS 14+ / Apple Silicon）：
-[DMG](https://github.com/xincxiong/PinShot/releases/download/v1.1.0/PinShot-1.1.0-macOS-arm64.dmg) ·
-[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.1.0/PinShot-1.1.0-macOS-arm64.zip) ·
-[版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.1.0)
+[DMG](https://github.com/xincxiong/PinShot/releases/download/v1.2.0/PinShot-1.2.0-macOS-arm64.dmg) ·
+[ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.2.0/PinShot-1.2.0-macOS-arm64.zip) ·
+[版本说明](https://github.com/xincxiong/PinShot/releases/tag/v1.2.0)
 
 Windows 10/11 x64（Beta）：
 [ZIP](https://github.com/xincxiong/PinShot/releases/download/v1.0.0-windows/PinShot-1.0.0-windows-x64.zip) ·
@@ -128,6 +128,7 @@ make install      # 安装到 ~/Applications（之后 open ~/Applications/PinSho
 | 菜单栏「延时截图」 | 3 / 5 / 10 秒后开始框选 |
 | 菜单栏「重复上次区域」 | 复现上一次框选位置 |
 | 标注更多工具 | `T` 文字 · `N` 序号 · `B` 模糊 · `G` 聚光灯 · `I` 取色 · `M` 测量 · `Z` 放大镜 |
+| 分享 | `⇧⌘S`（编辑器 / 贴图），或工具栏分享按钮 |
 | 菜单栏「滚动截图」 | 框选后可识别滚动区域，自动拼接长图；无辅助功能权限时提示手动滚动 |
 | 菜单栏「窗口截图」 | 弹出窗口列表，选择任意窗口截图 |
 | 四角拖拽 | 等比缩放，拖拽时显示尺寸徽标 |
@@ -137,6 +138,7 @@ make install      # 安装到 ~/Applications（之后 open ~/Applications/PinSho
 | 菜单栏「延时截图」 | 3 / 5 / 10 秒后开始框选 |
 | 菜单栏「重复上次区域」 | 复现上一次框选位置 |
 | 标注更多工具 | `T` 文字 · `N` 序号 · `B` 模糊 · `G` 聚光灯 · `I` 取色 · `M` 测量 · `Z` 放大镜 |
+| 分享 | `⇧⌘S`（编辑器 / 贴图），或工具栏分享按钮 |
 | 菜单栏「滚动截图」 | 框选后可识别滚动区域，自动拼接长图；无辅助功能权限时提示手动滚动 |
 | 菜单栏「窗口截图」 | 弹出窗口列表，选择任意窗口截图 |
 | 四角拖拽 | 等比缩放，拖拽时显示尺寸徽标 |

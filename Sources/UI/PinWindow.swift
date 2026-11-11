@@ -153,6 +153,11 @@ final class PinWindowController: NSWindowController {
         onClose?(self)
     }
 
+    /// 分享当前贴图（系统分享面板）。
+    func share(from view: NSView) {
+        ShareService.share(pinnedImage: image, from: view, preferredEdge: .maxY)
+    }
+
     /// 识别当前贴图里的文字，打开结果面板（自动复制能力在面板里）。
     func recognizeText() {
         OCRPanelController.shared.present(image: image, title: "识别文字")

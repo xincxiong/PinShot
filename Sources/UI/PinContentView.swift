@@ -7,6 +7,7 @@ import AppKit
 protocol PinToolbarDelegate: AnyObject {
     func pinToolbarDidTapCopy()
     func pinToolbarDidTapSave()
+    func pinToolbarDidTapShare()
     func pinToolbarDidTapRecognizeText()
     func pinToolbarDidTapToggleAutoHide()
     func pinToolbarDidTapTogglePlacement()
@@ -662,6 +663,12 @@ final class PinContentView: NSView, PinToolbarDelegate {
             title: "存储为…", action: #selector(menuSaveAs),
             keyEquivalent: "s", symbol: "square.and.arrow.down"
         ))
+        let shareItem = makeItem(
+            title: "分享…", action: #selector(menuShare),
+            keyEquivalent: "s", symbol: "square.and.arrow.up"
+        )
+        shareItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(shareItem)
         menu.addItem(makeItem(
             title: "识别文字…", action: #selector(menuRecognizeText),
             keyEquivalent: "t", symbol: "text.viewfinder"
@@ -778,6 +785,10 @@ final class PinContentView: NSView, PinToolbarDelegate {
         controller.recognizeText()
     }
 
+    @objc private func menuShare() {
+        controller.share(from: self)
+    }
+
     @objc private func menuSaveAs() {
         controller.saveImage(saveAs: true)
     }
@@ -847,7 +858,11 @@ final class PinContentView: NSView, PinToolbarDelegate {
             controller.copyToPasteboard()
             return true
         case "s":
-            controller.saveImage(saveAs: !event.modifierFlags.contains(.shift))
+            if event.modifierFlags.contains(.shift) {
+                controller.share(from: self)
+            } else {
+                controller.saveImage(saveAs: true)
+            }
             return true
         case "t":
             controller.recognizeText()
@@ -918,6 +933,11 @@ final class PinContentView: NSView, PinToolbarDelegate {
     func pinToolbarDidTapSave() {
         window?.makeFirstResponder(self)
         controller.saveImage(saveAs: true)
+    }
+
+    func pinToolbarDidTapShare() {
+        window?.makeFirstResponder(self)
+        controller.share(from: self)
     }
 
     func pinToolbarDidTapRecognizeText() {
@@ -1127,6 +1147,7 @@ final class PinToolbarView: NSVisualEffectView {
         let specs: [(PinToolbarButton.Kind, String, String)] = [
             (.copy, "doc.on.doc", "复制图片 ⌘C"),
             (.save, "square.and.arrow.down", "存储为… ⌘S"),
+            (.share, "square.and.arrow.up", "分享… ⇧⌘S"),
             (.recognizeText, "text.viewfinder", "识别文字 ⌘T"),
             (.toggleAutoHide, "eye", "自动隐藏"),
             (.togglePlacement, "pin.fill", "浮于顶层"),
@@ -1184,6 +1205,8 @@ final class PinToolbarView: NSVisualEffectView {
             delegate?.pinToolbarDidTapCopy()
         case .save:
             delegate?.pinToolbarDidTapSave()
+        case .share:
+            delegate?.pinToolbarDidTapShare()
         case .recognizeText:
             delegate?.pinToolbarDidTapRecognizeText()
         case .toggleAutoHide:
@@ -1223,6 +1246,7 @@ final class PinToolbarButton: NSButton {
     enum Kind: Int {
         case copy
         case save
+        case share
         case recognizeText
         case toggleAutoHide
         case togglePlacement

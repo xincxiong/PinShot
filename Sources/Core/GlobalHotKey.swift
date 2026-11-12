@@ -8,6 +8,11 @@ struct HotKeyCombo: Codable, Equatable {
 
     static let defaultCapturePin = HotKeyCombo(keyCode: UInt32(kVK_ANSI_2), carbonModifiers: UInt32(cmdKey | shiftKey))
     static let defaultCaptureCopy = HotKeyCombo(keyCode: UInt32(kVK_ANSI_1), carbonModifiers: UInt32(cmdKey | shiftKey))
+    /// 录制 GIF：⌃⌥⌘G，避开 Finder 的 ⇧⌘G
+    static let defaultCaptureGIF = HotKeyCombo(
+        keyCode: UInt32(kVK_ANSI_G),
+        carbonModifiers: UInt32(controlKey | optionKey | cmdKey)
+    )
 
     var hasModifier: Bool { carbonModifiers != 0 }
 

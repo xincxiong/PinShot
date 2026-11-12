@@ -153,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         item(with: .capturePin)?.title = "截图并贴图    \(settings.capturePinHotKey.display)"
         item(with: .captureCopy)?.title = "截图并复制    \(settings.captureCopyHotKey.display)"
+        item(with: .gifCapture)?.title = "录制 GIF    \(HotKeyCombo.defaultCaptureGIF.display)"
 
         let allItem = item(with: .toggleAllPins)
         allItem?.title = PinManager.shared.allForcedHidden ? "显示全部贴图" : "隐藏全部贴图"
@@ -270,6 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             switch hotKeyID {
             case 1: self.coordinator.begin(mode: .pin)
             case 2: self.coordinator.begin(mode: .clipboard)
+            case 3: self.coordinator.beginGIFRecording()
             default: break
             }
         }
@@ -279,7 +281,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func registerHotKeys() {
         let pinOK = hotKeyManager.register(settings.capturePinHotKey, id: 1)
         let copyOK = hotKeyManager.register(settings.captureCopyHotKey, id: 2)
-        if !pinOK || !copyOK {
+        let gifOK = hotKeyManager.register(.defaultCaptureGIF, id: 3)
+        if !pinOK || !copyOK || !gifOK {
             NSLog("[PinShot] 快捷键注册失败，可能与其他应用冲突")
         }
     }

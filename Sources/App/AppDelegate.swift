@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case windowCapture
         case fullScreen
         case scrollCapture
+        case gifCapture
         case delayCapture
         case delay3
         case delay5
@@ -94,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeItem(title: "窗口截图", action: #selector(windowCaptureAction), tag: .windowCapture, symbol: "macwindow"))
         menu.addItem(makeItem(title: "全屏截图", action: #selector(fullScreenAction), tag: .fullScreen, symbol: "rectangle.inset.filled"))
         menu.addItem(makeItem(title: "滚动截图", action: #selector(scrollCaptureAction), tag: .scrollCapture, symbol: "arrow.up.and.down.text.horizontal"))
+        menu.addItem(makeItem(title: "录制 GIF", action: #selector(gifCaptureAction), tag: .gifCapture, symbol: "record.circle"))
         let delayItem = NSMenuItem(title: "延时截图", action: nil, keyEquivalent: "")
         delayItem.tag = MenuTag.delayCapture.rawValue
         delayItem.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
@@ -194,6 +196,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func scrollCaptureAction() {
         coordinator.beginScrollCapture()
+    }
+
+    @objc private func gifCaptureAction() {
+        coordinator.beginGIFRecording()
     }
 
     @objc private func delay3Action() {

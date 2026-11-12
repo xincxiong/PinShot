@@ -20,6 +20,7 @@ final class CaptureCoordinator {
     private var pendingDelay: DispatchWorkItem?
     private var windowCandidates: [WindowCandidate] = []
     private var scrollController: ScrollingCaptureController?
+    private var gifRecorder: GIFRecorderController?
 
     private enum LastSelectionStore {
         static let displayIDKey = "lastSelection.displayID"
@@ -276,6 +277,53 @@ final class CaptureCoordinator {
                 self.scrollController = scroller
                 scroller.start()
                 NSLog("[PinShot] scroll capture started rect=\(globalRect)")
+            }
+        }
+        overlay = controller
+        controller.present()
+    }
+
+    /// 选区 GIF 录制：框选后开始 10fps 录制，HUD 停止（Esc 取消），结束后保存 GIF。
+    func beginGIFRecording() {
+        guard !isCapturing else { return }
+        isCapturing = true
+        previousFrontmostApp = NSWorkspace.shared.frontmostApplication
+        PinManager.shared.hideAllForCapture()
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(PinShotConstants.hideBeforeCaptureDelay * 1_000_000_000))
+            let result = await ScreenCapturer().captureAllScreens()
+            switch result {
+            case .success(let snapshots):
+                self.presentGIFSelection(with: snapshots)
+            case .failure(let error):
+                self.abortCapture()
+                self.handleCaptureFailure(error, mode: .pin)
+            }
+        }
+    }
+
+    private func presentGIFSelection(with snapshots: [ScreenSnapshot]) {
+        let controller = SelectionOverlayController(snapshots: snapshots) { [weak self] outcome in
+            guard let self else { return }
+            self.overlay = nil
+            switch outcome {
+            case .cancelled:
+                self.finishCapture()
+            case .selected(let snapshot, let rect):
+                let recorder = GIFRecorderController(
+                    snapshot: snapshot,
+                    selection: rect,
+                    onFinish: { [weak self] url in
+                        guard let self else { return }
+                        self.gifRecorder = nil
+                        NSLog("[PinShot] GIF recording finished url=\(url?.path ?? "nil")")
+                        self.finishCapture()
+                    }
+                )
+                self.gifRecorder = recorder
+                recorder.start()
             }
         }
         overlay = controller
